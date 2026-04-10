@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cleaning Operations Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-slate-50 min-h-screen p-6">
+  <div class="max-w-[1600px] mx-auto">
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+      <div>
+        <h1 class="text-3xl font-bold mb-2">Cleaning Operations Dashboard</h1>
+        <p class="text-slate-500">
+          Vanilla JS app pulling Jobs and Workers data from Google Sheets through Apps Script.
+        </p>
+      </div>
+
+      <div class="flex gap-2">
+        <button class="secondary-btn" onclick="refreshCurrentTab()">Refresh Current Tab</button>
+      </div>
+    </div>
+
+    <!-- Jobs Filters -->
+    <div id="jobsFilters" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+      <input
+        id="search"
+        placeholder="Search jobs or client name..."
+        class="w-full p-3 border rounded-xl"
+      />
+
+      <input
+        id="startDate"
+        type="date"
+        class="w-full p-3 border rounded-xl"
+      />
+
+      <input
+        id="endDate"
+        type="date"
+        class="w-full p-3 border rounded-xl"
+      />
+
+      <select
+        id="calendarFilter"
+        class="w-full p-3 border rounded-xl bg-white"
+      >
+        <option value="">All Calendars</option>
+      </select>
+    </div>
+
+    <!-- Workers Filters -->
+    <div id="workersFilters" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 hidden">
+      <input
+        id="workerSearch"
+        placeholder="Search worker name or ID..."
+        class="w-full p-3 border rounded-xl"
+      />
+
+      <select
+        id="workerActiveFilter"
+        class="w-full p-3 border rounded-xl bg-white"
+      >
+        <option value="">All Workers</option>
+        <option value="active">Active Only</option>
+        <option value="inactive">Inactive Only</option>
+      </select>
+
+      <div></div>
+    </div>
+
+    <div class="flex gap-2 mb-6">
+      <button class="secondary-btn" onclick="clearFilters()">Clear Filters</button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="stat-card">
+        <span id="primaryCountLabel">Jobs</span>: <span id="jobCount">0</span>
+      </div>
+      <div class="stat-card">
+        Loaded From API: <span id="apiStatus">No</span>
+      </div>
+      <div class="stat-card">
+        Active Tab: <span id="activeTabLabel">Jobs</span>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-2 mb-6">
+      <button onclick="setTab('jobs', event)" class="tab-button active">Jobs</button>
+      <button onclick="setTab('workers', event)" class="tab-button">Workers</button>
+    </div>
+
+    <div id="content"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
