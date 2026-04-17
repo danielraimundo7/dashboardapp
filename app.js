@@ -40,6 +40,10 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function round2(value) {
+  return Math.round((value || 0) * 100) / 100;
+}
+
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -545,10 +549,6 @@ function calculateJobPay(row) {
   return round2(toNumber(row.AssignedTime) * toNumber(row.Rate));
 }
 
-function round2(value) {
-  return Math.round((value || 0) * 100) / 100;
-}
-
 function getSundayForDate(input) {
   const d = new Date(`${input}T00:00:00`);
   if (Number.isNaN(d.getTime())) return null;
@@ -655,14 +655,21 @@ function updateSummaryCardsForJobs(filteredJobs) {
   const laborEl = document.getElementById("laborTotal");
   const assignedEl = document.getElementById("assignedTimeTotal");
 
-  const houseCount = filteredJobs.length;
+  const jobCount = filteredJobs.length;
   const revenueTotal = filteredJobs.reduce((sum, row) => sum + toNumber(row.GivenPrice), 0);
-  const laborTotal = filteredJobs.reduce((sum, row) => sum + toNumber(row.LaborCosts), 0);
-  const assignedTimeTotal = filteredJobs.reduce((sum, row) => sum + toNumber(row.AssignedTime), 0);
+  const assignedTimeTotal = filteredJobs.reduce((sum, row) => sum + durationToHoursFromDisplay(row.DisplayDuration), 0);
+  const linkedDocsCount = filteredJobs.reduce((sum, row) => {
+    let c = 0;
+    if (row.Contract) c += 1;
+    if (row.Estimate) c += 1;
+    if (row.Invoice) c += 1;
+    if (row.Photos) c += 1;
+    return sum + c;
+  }, 0);
 
-  if (countEl) countEl.innerText = houseCount;
+  if (countEl) countEl.innerText = jobCount;
   if (revenueEl) revenueEl.innerText = formatCurrency(revenueTotal);
-  if (laborEl) laborEl.innerText = formatCurrency(laborTotal);
+  if (laborEl) laborEl.innerText = linkedDocsCount;
   if (assignedEl) assignedEl.innerText = formatHours(assignedTimeTotal);
 }
 
@@ -702,6 +709,19 @@ function updateSummaryCardsForPayroll(summary) {
   if (assignedEl) assignedEl.innerText = formatHours(summary.assignedHours);
 }
 
+function durationToHoursFromDisplay(display) {
+  const text = String(display || "").toLowerCase();
+  let totalMinutes = 0;
+
+  const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*h/);
+  if (hoursMatch) totalMinutes += parseFloat(hoursMatch[1]) * 60;
+
+  const minutesMatch = text.match(/(\d+(?:\.\d+)?)\s*m/);
+  if (minutesMatch) totalMinutes += parseFloat(minutesMatch[1]);
+
+  return round2(totalMinutes / 60);
+}
+
 function buildJobsMetricsByDate(filteredJobs) {
   const grouped = {};
 
@@ -712,16 +732,20 @@ function buildJobsMetricsByDate(filteredJobs) {
     if (!grouped[date]) {
       grouped[date] = {
         revenue: 0,
-        labor: 0,
+        docs: 0,
         assignedTime: 0,
-        houses: 0
+        jobs: 0
       };
     }
 
     grouped[date].revenue += toNumber(row.GivenPrice);
-    grouped[date].labor += toNumber(row.LaborCosts);
-    grouped[date].assignedTime += toNumber(row.AssignedTime);
-    grouped[date].houses += 1;
+    grouped[date].assignedTime += durationToHoursFromDisplay(row.DisplayDuration);
+    grouped[date].jobs += 1;
+
+    if (row.Contract) grouped[date].docs += 1;
+    if (row.Estimate) grouped[date].docs += 1;
+    if (row.Invoice) grouped[date].docs += 1;
+    if (row.Photos) grouped[date].docs += 1;
   });
 
   const labels = Object.keys(grouped).sort();
@@ -729,9 +753,9 @@ function buildJobsMetricsByDate(filteredJobs) {
   return {
     labels,
     revenue: labels.map((d) => grouped[d].revenue),
-    labor: labels.map((d) => grouped[d].labor),
+    docs: labels.map((d) => grouped[d].docs),
     assignedTime: labels.map((d) => grouped[d].assignedTime),
-    houses: labels.map((d) => grouped[d].houses)
+    jobs: labels.map((d) => grouped[d].jobs)
   };
 }
 
@@ -766,8 +790,8 @@ function renderJobsCharts(filteredJobs) {
           data: metrics.revenue
         },
         {
-          label: "Labor Cost",
-          data: metrics.labor
+          label: "Linked Docs",
+          data: metrics.docs
         }
       ]
     },
@@ -797,6 +821,30 @@ function renderJobsCharts(filteredJobs) {
 
 function hideChartsForWorkers() {
   destroyCharts();
+}
+
+function renderLinkButtons(job) {
+  const links = [
+    { label: "Contract", value: job.Contract },
+    { label: "Estimate", value: job.Estimate },
+    { label: "Invoice", value: job.Invoice },
+    { label: "Photos", value: job.Photos }
+  ].filter((item) => item.value);
+
+  if (!links.length) return `<div class="text-slate-500">No links available.</div>`;
+
+  return `
+    <div class="flex flex-wrap gap-2">
+      ${links.map((item) => `
+        <a
+          href="${escapeHtml(item.value)}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="secondary-btn"
+        >${escapeHtml(item.label)}</a>
+      `).join("")}
+    </div>
+  `;
 }
 
 function render() {
@@ -916,30 +964,22 @@ function renderJobsTab(filteredJobs) {
                   <th>Date</th>
                   <th>CalendarName</th>
                   <th>ClientName</th>
-                  <th>Frequency</th>
                   <th>Zone</th>
                   <th>DisplayDuration</th>
-                  <th>ArrivalTime</th>
                   <th>Company</th>
+                  <th>ArrivalTime</th>
+                  <th>JobSequence</th>
                   <th>Address</th>
+                  <th>Frequency</th>
                   <th>GivenPrice</th>
                   <th>RateType</th>
                   <th>PaymentType</th>
-                  <th>AssignedTime</th>
-                  <th>WorkerCount</th>
                   <th>ServiceType</th>
-                  <th>Entrance</th>
-                  <th>KeyInfo</th>
-                  <th>MaterialInfo</th>
-                  <th>Instructions</th>
-                  <th>Notes</th>
+                  <th>Contract</th>
+                  <th>Estimate</th>
+                  <th>Invoice</th>
+                  <th>Photos</th>
                   <th>EventId</th>
-                  <th>WorkerInfo</th>
-                  <th>LaborCosts</th>
-                  <th>LaborCosts + Expense</th>
-                  <th>Gross Profit</th>
-                  <th>ProfitMargin</th>
-                  <th>PDF link</th>
                 </tr>
               </thead>
               <tbody>
@@ -947,7 +987,7 @@ function renderJobsTab(filteredJobs) {
                   filteredJobs.length === 0
                     ? `
                       <tr>
-                        <td colspan="27" class="text-center text-slate-500">
+                        <td colspan="19" class="text-center text-slate-500">
                           No jobs matched your filters.
                         </td>
                       </tr>
@@ -958,36 +998,22 @@ function renderJobsTab(filteredJobs) {
                             <td title="${escapeHtml(job.Date)}">${escapeHtml(job.Date)}</td>
                             <td title="${escapeHtml(job.CalendarName)}">${escapeHtml(job.CalendarName)}</td>
                             <td title="${escapeHtml(job.ClientName)}">${escapeHtml(job.ClientName)}</td>
-                            <td title="${escapeHtml(job.Frequency)}">${escapeHtml(job.Frequency)}</td>
                             <td title="${escapeHtml(job.Zone)}">${escapeHtml(job.Zone)}</td>
                             <td title="${escapeHtml(job.DisplayDuration)}">${escapeHtml(job.DisplayDuration)}</td>
-                            <td title="${escapeHtml(job.ArrivalTime)}">${escapeHtml(job.ArrivalTime)}</td>
                             <td title="${escapeHtml(job.Company)}">${escapeHtml(job.Company)}</td>
+                            <td title="${escapeHtml(job.ArrivalTime)}">${escapeHtml(job.ArrivalTime)}</td>
+                            <td title="${escapeHtml(job.JobSequence)}">${escapeHtml(job.JobSequence)}</td>
                             <td title="${escapeHtml(job.Address)}">${escapeHtml(job.Address)}</td>
+                            <td title="${escapeHtml(job.Frequency)}">${escapeHtml(job.Frequency)}</td>
                             <td title="${escapeHtml(job.GivenPrice)}">${escapeHtml(job.GivenPrice)}</td>
                             <td title="${escapeHtml(job.RateType)}">${escapeHtml(job.RateType)}</td>
                             <td title="${escapeHtml(job.PaymentType)}">${escapeHtml(job.PaymentType)}</td>
-                            <td title="${escapeHtml(job.AssignedTime)}">${escapeHtml(job.AssignedTime)}</td>
-                            <td title="${escapeHtml(job.WorkerCount)}">${escapeHtml(job.WorkerCount)}</td>
                             <td title="${escapeHtml(job.ServiceType)}">${escapeHtml(job.ServiceType)}</td>
-                            <td title="${escapeHtml(job.Entrance)}">${escapeHtml(job.Entrance)}</td>
-                            <td title="${escapeHtml(job.KeyInfo)}">${escapeHtml(job.KeyInfo)}</td>
-                            <td title="${escapeHtml(job.MaterialInfo)}">${escapeHtml(job.MaterialInfo)}</td>
-                            <td title="${escapeHtml(job.Instructions)}">${escapeHtml(job.Instructions)}</td>
-                            <td title="${escapeHtml(job.Notes)}">${escapeHtml(job.Notes)}</td>
+                            <td>${job.Contract ? `<a href="${escapeHtml(job.Contract)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>` : ""}</td>
+                            <td>${job.Estimate ? `<a href="${escapeHtml(job.Estimate)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>` : ""}</td>
+                            <td>${job.Invoice ? `<a href="${escapeHtml(job.Invoice)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>` : ""}</td>
+                            <td>${job.Photos ? `<a href="${escapeHtml(job.Photos)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>` : ""}</td>
                             <td title="${escapeHtml(job.EventId)}">${escapeHtml(job.EventId)}</td>
-                            <td title="${escapeHtml(job.WorkerInfo)}">${escapeHtml(job.WorkerInfo)}</td>
-                            <td title="${escapeHtml(job.LaborCosts)}">${escapeHtml(job.LaborCosts)}</td>
-                            <td title="${escapeHtml(job["LaborCosts + Expense"])}">${escapeHtml(job["LaborCosts + Expense"])}</td>
-                            <td title="${escapeHtml(job["Gross Profit"])}">${escapeHtml(job["Gross Profit"])}</td>
-                            <td title="${escapeHtml(job.ProfitMargin)}"><span class="badge badge-neutral">${escapeHtml(job.ProfitMargin)}</span></td>
-                            <td>
-                              ${
-                                job["PDF link"]
-                                  ? `<a href="${escapeHtml(job["PDF link"])}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open PDF</a>`
-                                  : ""
-                              }
-                            </td>
                           </tr>
                         `)
                         .join("")
@@ -1018,34 +1044,32 @@ function renderJobsTab(filteredJobs) {
                   ${detailField("Date", selected.Date)}
                   ${detailField("CalendarName", selected.CalendarName)}
                   ${detailField("ClientName", selected.ClientName)}
-                  ${detailField("Frequency", selected.Frequency)}
                   ${detailField("Zone", selected.Zone)}
                   ${detailField("DisplayDuration", selected.DisplayDuration)}
-                  ${detailField("ArrivalTime", selected.ArrivalTime)}
                   ${detailField("Company", selected.Company)}
+                  ${detailField("ArrivalTime", selected.ArrivalTime)}
+                  ${detailField("JobSequence", selected.JobSequence)}
                   ${detailField("Address", selected.Address)}
+                  ${detailField("Frequency", selected.Frequency)}
                   ${detailField("GivenPrice", selected.GivenPrice)}
+                  ${detailField("AdditionalExpense", selected.AdditionalExpense)}
                   ${detailField("RateType", selected.RateType)}
+                  ${detailField("Tip", selected.Tip)}
                   ${detailField("PaymentType", selected.PaymentType)}
-                  ${detailField("AssignedTime", selected.AssignedTime)}
-                  ${detailField("WorkerCount", selected.WorkerCount)}
+                  ${detailTextarea("FinanceNotes", selected.FinanceNotes)}
+                  ${detailTextarea("QcNotes", selected.QcNotes)}
                   ${detailField("ServiceType", selected.ServiceType)}
                   ${detailField("Entrance", selected.Entrance)}
-                  ${detailTextarea("KeyInfo", selected.KeyInfo)}
-                  ${detailTextarea("MaterialInfo", selected.MaterialInfo)}
+                  ${detailField("MaterialInfo", selected.MaterialInfo)}
                   ${detailTextarea("Instructions", selected.Instructions)}
-                  ${detailTextarea("Notes", selected.Notes)}
-                  ${detailField("EventId", selected.EventId)}
+                  ${detailTextarea("OtherInfo", selected.OtherInfo)}
                   ${detailTextarea("WorkerInfo", selected.WorkerInfo)}
-                  ${detailField("LaborCosts", selected.LaborCosts)}
-                  ${detailField("LaborCosts + Expense", selected["LaborCosts + Expense"])}
-                  ${detailField("Gross Profit", selected["Gross Profit"])}
-                  ${detailField("ProfitMargin", selected.ProfitMargin)}
-                  ${
-                    selected["PDF link"]
-                      ? `<div><a href="${escapeHtml(selected["PDF link"])}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open Estimate PDF</a></div>`
-                      : ""
-                  }
+                  ${detailField("EventId", selected.EventId)}
+                </div>
+
+                <div class="mt-4">
+                  <label class="block text-sm font-medium mb-2">Links</label>
+                  ${renderLinkButtons(selected)}
                 </div>
               `
               : `<div class="text-slate-500">No job selected.</div>`
