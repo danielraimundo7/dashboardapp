@@ -83,6 +83,53 @@ function getUniqueCalendars() {
   )].sort((a, b) => a.localeCompare(b));
 }
 
+function extractHrefOrUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const hrefMatch = text.match(/href\s*=\s*["']([^"']+)["']/i);
+  if (hrefMatch && hrefMatch[1]) {
+    return hrefMatch[1];
+  }
+
+  const urlMatch = text.match(/https?:\/\/[^\s<>"']+/i);
+  if (urlMatch && urlMatch[0]) {
+    return urlMatch[0];
+  }
+
+  return "";
+}
+
+function renderLinkButtons(job) {
+  const links = [
+    { label: "Contract", value: extractHrefOrUrl(job.Contract) },
+    { label: "Estimate", value: extractHrefOrUrl(job.Estimate) },
+    { label: "Invoice", value: extractHrefOrUrl(job.Invoice) },
+    { label: "Photos", value: extractHrefOrUrl(job.Photos) }
+  ].filter((item) => item.value);
+
+  if (!links.length) return `<div class="text-slate-500">No links available.</div>`;
+
+  return `
+    <div class="flex flex-wrap gap-2">
+      ${links.map((item) => `
+        <a
+          href="${escapeHtml(item.value)}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="secondary-btn"
+        >${escapeHtml(item.label)}</a>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderLinkCell(value) {
+  const url = extractHrefOrUrl(value);
+  if (!url) return "";
+  return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>`;
+}
+
 function setTab(tab, event) {
   currentTab = tab;
   currentView = "main";
@@ -660,10 +707,10 @@ function updateSummaryCardsForJobs(filteredJobs) {
   const assignedTimeTotal = filteredJobs.reduce((sum, row) => sum + durationToHoursFromDisplay(row.DisplayDuration), 0);
   const linkedDocsCount = filteredJobs.reduce((sum, row) => {
     let c = 0;
-    if (row.Contract) c += 1;
-    if (row.Estimate) c += 1;
-    if (row.Invoice) c += 1;
-    if (row.Photos) c += 1;
+    if (extractHrefOrUrl(row.Contract)) c += 1;
+    if (extractHrefOrUrl(row.Estimate)) c += 1;
+    if (extractHrefOrUrl(row.Invoice)) c += 1;
+    if (extractHrefOrUrl(row.Photos)) c += 1;
     return sum + c;
   }, 0);
 
@@ -742,10 +789,10 @@ function buildJobsMetricsByDate(filteredJobs) {
     grouped[date].assignedTime += durationToHoursFromDisplay(row.DisplayDuration);
     grouped[date].jobs += 1;
 
-    if (row.Contract) grouped[date].docs += 1;
-    if (row.Estimate) grouped[date].docs += 1;
-    if (row.Invoice) grouped[date].docs += 1;
-    if (row.Photos) grouped[date].docs += 1;
+    if (extractHrefOrUrl(row.Contract)) grouped[date].docs += 1;
+    if (extractHrefOrUrl(row.Estimate)) grouped[date].docs += 1;
+    if (extractHrefOrUrl(row.Invoice)) grouped[date].docs += 1;
+    if (extractHrefOrUrl(row.Photos)) grouped[date].docs += 1;
   });
 
   const labels = Object.keys(grouped).sort();
@@ -821,30 +868,6 @@ function renderJobsCharts(filteredJobs) {
 
 function hideChartsForWorkers() {
   destroyCharts();
-}
-
-function renderLinkButtons(job) {
-  const links = [
-    { label: "Contract", value: job.Contract },
-    { label: "Estimate", value: job.Estimate },
-    { label: "Invoice", value: job.Invoice },
-    { label: "Photos", value: job.Photos }
-  ].filter((item) => item.value);
-
-  if (!links.length) return `<div class="text-slate-500">No links available.</div>`;
-
-  return `
-    <div class="flex flex-wrap gap-2">
-      ${links.map((item) => `
-        <a
-          href="${escapeHtml(item.value)}"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="secondary-btn"
-        >${escapeHtml(item.label)}</a>
-      `).join("")}
-    </div>
-  `;
 }
 
 function render() {
@@ -1009,10 +1032,10 @@ function renderJobsTab(filteredJobs) {
                             <td title="${escapeHtml(job.RateType)}">${escapeHtml(job.RateType)}</td>
                             <td title="${escapeHtml(job.PaymentType)}">${escapeHtml(job.PaymentType)}</td>
                             <td title="${escapeHtml(job.ServiceType)}">${escapeHtml(job.ServiceType)}</td>
-                            <td>${job.Contract ? `<a href="${escapeHtml(job.Contract)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>` : ""}</td>
-                            <td>${job.Estimate ? `<a href="${escapeHtml(job.Estimate)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>` : ""}</td>
-                            <td>${job.Invoice ? `<a href="${escapeHtml(job.Invoice)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>` : ""}</td>
-                            <td>${job.Photos ? `<a href="${escapeHtml(job.Photos)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>` : ""}</td>
+                            <td>${renderLinkCell(job.Contract)}</td>
+                            <td>${renderLinkCell(job.Estimate)}</td>
+                            <td>${renderLinkCell(job.Invoice)}</td>
+                            <td>${renderLinkCell(job.Photos)}</td>
                             <td title="${escapeHtml(job.EventId)}">${escapeHtml(job.EventId)}</td>
                           </tr>
                         `)
