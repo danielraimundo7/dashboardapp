@@ -1,17 +1,17 @@
 const API_BASE_URL =
   "https://script.google.com/macros/s/AKfycbwz401Ii47fb86kB-eo93tirJmGpbHFS2jEonIn6yuFjNqu5rxjQiPvUTOzDkvAvoPR/exec";
 
-let currentTab = "jobs";
+let currentTab = "events";
 let currentView = "main";
 
-let jobs = [];
+let eventsData = [];
 let workers = [];
 let jobsPerWorker = [];
 
-let selectedJob = null;
+let selectedEvent = null;
 let selectedWorker = null;
 
-let jobsLoadedFromApi = false;
+let eventsLoadedFromApi = false;
 let workersLoadedFromApi = false;
 let jobsPerWorkerLoadedFromApi = false;
 let dashboardMeta = { lastSyncIso: "" };
@@ -20,9 +20,7 @@ let revenueLaborChart = null;
 let assignedTimeChart = null;
 let selectedCalendars = new Set();
 let chartsMinimized = false;
-
-let payrollSelectedWorkerId = "";
-let payrollSelectedWeekStart = "";
+let copyStatusMessage = "";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -75,37 +73,25 @@ function getActiveBadgeClass(isActive) {
   return isActive ? "badge-success" : "badge-danger";
 }
 
-function getUniqueCalendars() {
-  return [...new Set(
-    jobs
-      .map((job) => String(job.CalendarName || "").trim())
-      .filter(Boolean)
-  )].sort((a, b) => a.localeCompare(b));
-}
-
 function extractHrefOrUrl(value) {
   const text = String(value || "").trim();
   if (!text) return "";
 
   const hrefMatch = text.match(/href\s*=\s*["']([^"']+)["']/i);
-  if (hrefMatch && hrefMatch[1]) {
-    return hrefMatch[1];
-  }
+  if (hrefMatch && hrefMatch[1]) return hrefMatch[1];
 
   const urlMatch = text.match(/https?:\/\/[^\s<>"']+/i);
-  if (urlMatch && urlMatch[0]) {
-    return urlMatch[0];
-  }
+  if (urlMatch && urlMatch[0]) return urlMatch[0];
 
   return "";
 }
 
-function renderLinkButtons(job) {
+function renderLinkButtons(row) {
   const links = [
-    { label: "Contract", value: extractHrefOrUrl(job.Contract) },
-    { label: "Estimate", value: extractHrefOrUrl(job.Estimate) },
-    { label: "Invoice", value: extractHrefOrUrl(job.Invoice) },
-    { label: "Photos", value: extractHrefOrUrl(job.Photos) }
+    { label: "Contract", value: extractHrefOrUrl(row.Contract) },
+    { label: "Estimate", value: extractHrefOrUrl(row.Estimate) },
+    { label: "Invoice", value: extractHrefOrUrl(row.Invoice) },
+    { label: "Photos", value: extractHrefOrUrl(row.Photos) }
   ].filter((item) => item.value);
 
   if (!links.length) return `<div class="text-slate-500">No links available.</div>`;
@@ -130,9 +116,31 @@ function renderLinkCell(value) {
   return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Open</a>`;
 }
 
+function getUniqueCalendars() {
+  return [...new Set(
+    eventsData
+      .map((row) => String(row.CalendarName || "").trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
+}
+
+function isTravelEvent(row) {
+  const explicitType = String(row.EventType || "").trim().toLowerCase();
+  if (explicitType === "travel") return true;
+  if (explicitType === "job") return false;
+
+  const titleText = `${row.ClientName || ""} ${row.JobSequence || ""}`.toLowerCase();
+  return /\b(pickup|dropoff|travel)\b/.test(titleText);
+}
+
+function isJobEvent(row) {
+  return !isTravelEvent(row);
+}
+
 function setTab(tab, event) {
   currentTab = tab;
   currentView = "main";
+  copyStatusMessage = "";
 
   document.querySelectorAll(".tab-button").forEach((btn) => {
     btn.classList.remove("active");
@@ -144,17 +152,12 @@ function setTab(tab, event) {
 
   toggleFilterGroups();
 
-  if (tab === "jobs" && !jobsLoadedFromApi) {
-    refreshJobs();
+  if ((tab === "events" || tab === "jobs" || tab === "travel") && !eventsLoadedFromApi) {
+    refreshEvents();
     return;
   }
 
   if (tab === "workers" && !workersLoadedFromApi) {
-    refreshWorkers();
-    return;
-  }
-
-  if (tab === "payroll" && !workersLoadedFromApi) {
     refreshWorkers();
     return;
   }
@@ -166,7 +169,7 @@ function toggleChartsVisibility() {
   chartsMinimized = !chartsMinimized;
   applyChartsVisibility();
 
-  if (currentTab === "jobs" && currentView === "main") {
+  if ((currentTab === "events" || currentTab === "jobs" || currentTab === "travel") && currentView === "main") {
     render();
   }
 }
@@ -176,7 +179,9 @@ function applyChartsVisibility() {
   const charts = document.getElementById("dashboardCharts");
   const btn = document.getElementById("toggleChartsBtn");
 
-  const shouldShowShell = currentTab === "jobs" && currentView === "main";
+  const shouldShowShell =
+    (currentTab === "events" || currentTab === "jobs" || currentTab === "travel") &&
+    currentView === "main";
 
   if (chartsShell) {
     chartsShell.classList.toggle("hidden", !shouldShowShell);
@@ -196,12 +201,14 @@ function applyChartsVisibility() {
 }
 
 function toggleFilterGroups() {
-  const jobsFilters = document.getElementById("jobsFilters");
+  const eventFilters = document.getElementById("eventFilters");
   const workersFilters = document.getElementById("workersFilters");
   const primaryCountLabel = document.getElementById("primaryCountLabel");
 
-  if (jobsFilters) {
-    jobsFilters.classList.toggle("hidden", currentTab !== "jobs" || currentView !== "main");
+  const showEventFilters = ["events", "jobs", "travel"].includes(currentTab) && currentView === "main";
+
+  if (eventFilters) {
+    eventFilters.classList.toggle("hidden", !showEventFilters);
   }
 
   if (workersFilters) {
@@ -211,12 +218,14 @@ function toggleFilterGroups() {
   if (primaryCountLabel) {
     if (currentTab === "workers") {
       primaryCountLabel.innerText = "Workers";
-    } else if (currentTab === "mileage") {
-      primaryCountLabel.innerText = "Mileage";
-    } else if (currentTab === "payroll") {
-      primaryCountLabel.innerText = "Payroll";
-    } else {
+    } else if (currentTab === "travel") {
+      primaryCountLabel.innerText = "Travel";
+    } else if (currentTab === "jobs") {
       primaryCountLabel.innerText = "Jobs";
+    } else if (currentTab === "sales") {
+      primaryCountLabel.innerText = "Sales";
+    } else {
+      primaryCountLabel.innerText = "Events";
     }
   }
 
@@ -252,40 +261,34 @@ function updateLastSyncText() {
   el.innerText = formatDateTimeFriendly(dashboardMeta.lastSyncIso);
 }
 
-async function loadJobsFromApi() {
+async function loadEventsFromApi() {
   const url = `${API_BASE_URL}?action=getJobs&_=${Date.now()}`;
-  const response = await fetch(url, {
-    method: "GET",
-    cache: "no-store"
-  });
+  const response = await fetch(url, { method: "GET", cache: "no-store" });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} while loading Jobs.`);
+    throw new Error(`HTTP ${response.status} while loading Events.`);
   }
 
   const result = await response.json();
   if (!result.success) {
-    throw new Error(result.error || "Failed to load Jobs data.");
+    throw new Error(result.error || "Failed to load Events data.");
   }
 
-  jobs = Array.isArray(result.data) ? result.data : [];
-  jobsLoadedFromApi = true;
+  eventsData = Array.isArray(result.data) ? result.data : [];
+  eventsLoadedFromApi = true;
 
   initializeCalendarSelection();
   renderCalendarChecklist();
   updateCalendarButtonLabel();
 
-  if (!selectedJob && jobs.length > 0) {
-    selectedJob = jobs[0];
+  if (!selectedEvent && eventsData.length > 0) {
+    selectedEvent = eventsData[0];
   }
 }
 
 async function loadWorkersFromApi() {
   const url = `${API_BASE_URL}?action=getWorkers&_=${Date.now()}`;
-  const response = await fetch(url, {
-    method: "GET",
-    cache: "no-store"
-  });
+  const response = await fetch(url, { method: "GET", cache: "no-store" });
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} while loading Workers.`);
@@ -306,10 +309,7 @@ async function loadWorkersFromApi() {
 
 async function loadJobsPerWorkerFromApi() {
   const url = `${API_BASE_URL}?action=getJobsPerWorker&_=${Date.now()}`;
-  const response = await fetch(url, {
-    method: "GET",
-    cache: "no-store"
-  });
+  const response = await fetch(url, { method: "GET", cache: "no-store" });
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} while loading JobsPerWorker.`);
@@ -333,9 +333,7 @@ function initializeCalendarSelection() {
   }
 
   const validCalendars = new Set(calendars);
-  selectedCalendars = new Set(
-    [...selectedCalendars].filter((name) => validCalendars.has(name))
-  );
+  selectedCalendars = new Set([...selectedCalendars].filter((name) => validCalendars.has(name)));
 
   if (selectedCalendars.size === 0) {
     calendars.forEach((name) => selectedCalendars.add(name));
@@ -392,11 +390,8 @@ function toggleCalendarDropdown() {
 }
 
 function toggleCalendarSelection(calendarName, isChecked) {
-  if (isChecked) {
-    selectedCalendars.add(calendarName);
-  } else {
-    selectedCalendars.delete(calendarName);
-  }
+  if (isChecked) selectedCalendars.add(calendarName);
+  else selectedCalendars.delete(calendarName);
 
   updateCalendarButtonLabel();
   render();
@@ -416,23 +411,20 @@ function clearCalendarSelection() {
   render();
 }
 
-async function refreshJobs() {
+async function refreshEvents() {
   try {
-    jobsLoadedFromApi = false;
-    jobs = [];
-    selectedJob = null;
+    eventsLoadedFromApi = false;
+    eventsData = [];
+    selectedEvent = null;
+    copyStatusMessage = "";
 
-    renderLoadingState("Jobs");
+    renderLoadingState("Events");
 
-    await Promise.all([
-      loadJobsFromApi(),
-      loadDashboardMetaFromApi()
-    ]);
-
+    await Promise.all([loadEventsFromApi(), loadDashboardMetaFromApi()]);
     render();
   } catch (error) {
-    console.error("Error loading Jobs:", error);
-    renderErrorState(error.message || "Unknown error while loading Jobs.");
+    console.error("Error loading Events:", error);
+    renderErrorState(error.message || "Unknown error while loading Events.");
   }
 }
 
@@ -444,11 +436,7 @@ async function refreshWorkers() {
 
     renderLoadingState("Workers");
 
-    await Promise.all([
-      loadWorkersFromApi(),
-      loadDashboardMetaFromApi()
-    ]);
-
+    await Promise.all([loadWorkersFromApi(), loadDashboardMetaFromApi()]);
     render();
   } catch (error) {
     console.error("Error loading Workers:", error);
@@ -466,21 +454,12 @@ function refreshCurrentTab() {
     return;
   }
 
-  if (currentTab === "payroll") {
-    if (!workersLoadedFromApi) {
-      refreshWorkers();
-      return;
-    }
+  if (currentTab === "sales") {
     render();
     return;
   }
 
-  if (currentTab === "mileage") {
-    render();
-    return;
-  }
-
-  refreshJobs();
+  refreshEvents();
 }
 
 function renderLoadingState(label) {
@@ -523,7 +502,7 @@ function renderErrorState(message) {
   }
 }
 
-function getFilteredJobs() {
+function getBaseFilteredEvents() {
   const searchInput = document.getElementById("search");
   const startDateInput = document.getElementById("startDate");
   const endDateInput = document.getElementById("endDate");
@@ -532,25 +511,29 @@ function getFilteredJobs() {
   const startDateValue = startDateInput ? startDateInput.value : "";
   const endDateValue = endDateInput ? endDateInput.value : "";
 
-  return jobs.filter((job) => {
-    const matchesSearch =
-      !searchValue || JSON.stringify(job).toLowerCase().includes(searchValue);
+  return eventsData.filter((row) => {
+    const matchesSearch = !searchValue || JSON.stringify(row).toLowerCase().includes(searchValue);
+    const rowDate = row.Date || "";
 
-    const jobDate = job.Date || "";
-
-    const matchesStartDate =
-      !startDateValue || (jobDate && jobDate >= startDateValue);
-
-    const matchesEndDate =
-      !endDateValue || (jobDate && jobDate <= endDateValue);
+    const matchesStartDate = !startDateValue || (rowDate && rowDate >= startDateValue);
+    const matchesEndDate = !endDateValue || (rowDate && rowDate <= endDateValue);
 
     const matchesCalendar =
       selectedCalendars.size === 0
         ? true
-        : selectedCalendars.has(String(job.CalendarName || "").trim());
+        : selectedCalendars.has(String(row.CalendarName || "").trim());
 
     return matchesSearch && matchesStartDate && matchesEndDate && matchesCalendar;
   });
+}
+
+function getFilteredRowsByTab() {
+  const base = getBaseFilteredEvents();
+
+  if (currentTab === "jobs") return base.filter(isJobEvent);
+  if (currentTab === "travel") return base.filter(isTravelEvent);
+
+  return base;
 }
 
 function getFilteredWorkers() {
@@ -581,6 +564,7 @@ function getSelectedWorkerJobs() {
 
   return jobsPerWorker
     .filter((row) => String(row.WorkerID || "").trim() === workerId)
+    .filter((row) => String(row.EventType || "").trim().toLowerCase() !== "travel")
     .sort((a, b) => {
       const dateA = String(a.Date || "");
       const dateB = String(b.Date || "");
@@ -596,116 +580,16 @@ function calculateJobPay(row) {
   return round2(toNumber(row.AssignedTime) * toNumber(row.Rate));
 }
 
-function getSundayForDate(input) {
-  const d = new Date(`${input}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return null;
-  const sunday = new Date(d);
-  sunday.setDate(d.getDate() - d.getDay());
-  return sunday;
-}
-
-function formatDateYmd(dateObj) {
-  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return "";
-  const year = dateObj.getFullYear();
-  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-  const day = String(dateObj.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatDateFriendly(dateStr) {
-  const d = new Date(`${dateStr}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function getPayrollWeekRange(weekStartStr) {
-  const sunday = getSundayForDate(weekStartStr);
-  if (!sunday) return null;
-
-  const saturday = new Date(sunday);
-  saturday.setDate(sunday.getDate() + 6);
-
-  return {
-    start: formatDateYmd(sunday),
-    end: formatDateYmd(saturday)
-  };
-}
-
-function getCurrentPayrollWeekStart() {
-  const now = new Date();
-  const sunday = new Date(now);
-  sunday.setDate(now.getDate() - now.getDay());
-  return formatDateYmd(sunday);
-}
-
-function ensurePayrollDefaults() {
-  if (!payrollSelectedWeekStart) {
-    payrollSelectedWeekStart = getCurrentPayrollWeekStart();
-  }
-}
-
-function getPayrollWorkerOptions() {
-  return [...workers]
-    .sort((a, b) => String(a.Name || "").localeCompare(String(b.Name || "")));
-}
-
-function getPayrollRowsForWeek() {
-  ensurePayrollDefaults();
-
-  const range = getPayrollWeekRange(payrollSelectedWeekStart);
-  if (!range) return [];
-
-  const workerFilter = String(payrollSelectedWorkerId || "").trim();
-
-  return jobsPerWorker.filter((row) => {
-    const rowDate = String(row.Date || "").trim();
-    if (!rowDate) return false;
-    if (rowDate < range.start || rowDate > range.end) return false;
-
-    if (workerFilter && String(row.WorkerID || "").trim() !== workerFilter) {
-      return false;
-    }
-
-    return true;
-  });
-}
-
-function buildPayrollSummary(rows) {
-  const totalAssignedHours = rows.reduce((sum, row) => sum + toNumber(row.AssignedTime), 0);
-  const totalLaborPay = rows.reduce((sum, row) => sum + calculateJobPay(row), 0);
-
-  const uniqueWorkers = new Set(
-    rows.map((row) => String(row.WorkerID || "").trim()).filter(Boolean)
-  ).size;
-
-  return {
-    jobs: rows.length,
-    workers: uniqueWorkers,
-    assignedHours: totalAssignedHours,
-    laborPay: totalLaborPay
-  };
-}
-
-function onPayrollWeekChange(value) {
-  payrollSelectedWeekStart = value;
-  render();
-}
-
-function onPayrollWorkerChange(value) {
-  payrollSelectedWorkerId = value;
-  render();
-}
-
-function updateSummaryCardsForJobs(filteredJobs) {
+function updateSummaryCardsForEvents(filteredRows) {
   const countEl = document.getElementById("jobCount");
   const revenueEl = document.getElementById("revenueTotal");
   const laborEl = document.getElementById("laborTotal");
   const assignedEl = document.getElementById("assignedTimeTotal");
 
-  const jobCount = filteredJobs.length;
-  const revenueTotal = filteredJobs.reduce((sum, row) => sum + toNumber(row.GivenPrice), 0);
-  const assignedTimeTotal = filteredJobs.reduce((sum, row) => sum + durationToHoursFromDisplay(row.DisplayDuration), 0);
-  const linkedDocsCount = filteredJobs.reduce((sum, row) => {
+  const eventCount = filteredRows.length;
+  const revenueTotal = filteredRows.reduce((sum, row) => sum + toNumber(row.GivenPrice), 0);
+  const assignedTimeTotal = filteredRows.reduce((sum, row) => sum + durationToHoursFromDisplay(row.DisplayDuration), 0);
+  const linkedDocsCount = filteredRows.reduce((sum, row) => {
     let c = 0;
     if (extractHrefOrUrl(row.Contract)) c += 1;
     if (extractHrefOrUrl(row.Estimate)) c += 1;
@@ -714,10 +598,27 @@ function updateSummaryCardsForJobs(filteredJobs) {
     return sum + c;
   }, 0);
 
-  if (countEl) countEl.innerText = jobCount;
+  if (countEl) countEl.innerText = eventCount;
   if (revenueEl) revenueEl.innerText = formatCurrency(revenueTotal);
   if (laborEl) laborEl.innerText = linkedDocsCount;
   if (assignedEl) assignedEl.innerText = formatHours(assignedTimeTotal);
+}
+
+function updateSummaryCardsForTravel(filteredRows) {
+  const countEl = document.getElementById("jobCount");
+  const revenueEl = document.getElementById("revenueTotal");
+  const laborEl = document.getElementById("laborTotal");
+  const assignedEl = document.getElementById("assignedTimeTotal");
+
+  const eventCount = filteredRows.length;
+  const totalMiles = filteredRows.reduce((sum, row) => sum + getTravelMiles(row), 0);
+  const totalMinutes = filteredRows.reduce((sum, row) => sum + getTravelMinutes(row), 0);
+  const alertCount = filteredRows.filter((row) => isTravelAlert(row)).length;
+
+  if (countEl) countEl.innerText = eventCount;
+  if (revenueEl) revenueEl.innerText = `${round2(totalMiles)} mi`;
+  if (laborEl) laborEl.innerText = alertCount;
+  if (assignedEl) assignedEl.innerText = `${round2(totalMinutes)} mins`;
 }
 
 function updateSummaryCardsForWorkers(filteredWorkers) {
@@ -732,7 +633,7 @@ function updateSummaryCardsForWorkers(filteredWorkers) {
   if (assignedEl) assignedEl.innerText = "-";
 }
 
-function updateSummaryCardsForMileage() {
+function updateSummaryCardsForSales() {
   const countEl = document.getElementById("jobCount");
   const revenueEl = document.getElementById("revenueTotal");
   const laborEl = document.getElementById("laborTotal");
@@ -742,18 +643,6 @@ function updateSummaryCardsForMileage() {
   if (revenueEl) revenueEl.innerText = "-";
   if (laborEl) laborEl.innerText = "-";
   if (assignedEl) assignedEl.innerText = "-";
-}
-
-function updateSummaryCardsForPayroll(summary) {
-  const countEl = document.getElementById("jobCount");
-  const revenueEl = document.getElementById("revenueTotal");
-  const laborEl = document.getElementById("laborTotal");
-  const assignedEl = document.getElementById("assignedTimeTotal");
-
-  if (countEl) countEl.innerText = summary.jobs;
-  if (revenueEl) revenueEl.innerText = formatCurrency(summary.laborPay);
-  if (laborEl) laborEl.innerText = `${summary.workers}`;
-  if (assignedEl) assignedEl.innerText = formatHours(summary.assignedHours);
 }
 
 function durationToHoursFromDisplay(display) {
@@ -769,10 +658,49 @@ function durationToHoursFromDisplay(display) {
   return round2(totalMinutes / 60);
 }
 
-function buildJobsMetricsByDate(filteredJobs) {
+function durationToMinutesFromDisplay(display) {
+  const text = String(display || "").toLowerCase();
+  let totalMinutes = 0;
+
+  const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*h/);
+  if (hoursMatch) totalMinutes += parseFloat(hoursMatch[1]) * 60;
+
+  const minutesMatch = text.match(/(\d+(?:\.\d+)?)\s*m/);
+  if (minutesMatch) totalMinutes += parseFloat(minutesMatch[1]);
+
+  return round2(totalMinutes);
+}
+
+function getTravelMiles(row) {
+  return toNumber(row.Miles);
+}
+
+function getTravelMinutes(row) {
+  return durationToMinutesFromDisplay(row.DisplayDuration);
+}
+
+function isTravelAlert(row) {
+  return getTravelMiles(row) > 10 || getTravelMinutes(row) > 30;
+}
+
+function getTravelAlertLabel(row) {
+  const overMiles = getTravelMiles(row) > 10;
+  const overMinutes = getTravelMinutes(row) > 30;
+
+  if (overMiles && overMinutes) return "Over both";
+  if (overMiles) return "Over 10 miles";
+  if (overMinutes) return "Over 30 mins";
+  return "Normal";
+}
+
+function getTravelAlertBadgeClass(row) {
+  return isTravelAlert(row) ? "badge-danger" : "badge-success";
+}
+
+function buildMetricsByDate(filteredRows) {
   const grouped = {};
 
-  filteredJobs.forEach((row) => {
+  filteredRows.forEach((row) => {
     const date = String(row.Date || "");
     if (!date) return;
 
@@ -781,13 +709,13 @@ function buildJobsMetricsByDate(filteredJobs) {
         revenue: 0,
         docs: 0,
         assignedTime: 0,
-        jobs: 0
+        count: 0
       };
     }
 
     grouped[date].revenue += toNumber(row.GivenPrice);
     grouped[date].assignedTime += durationToHoursFromDisplay(row.DisplayDuration);
-    grouped[date].jobs += 1;
+    grouped[date].count += 1;
 
     if (extractHrefOrUrl(row.Contract)) grouped[date].docs += 1;
     if (extractHrefOrUrl(row.Estimate)) grouped[date].docs += 1;
@@ -802,7 +730,7 @@ function buildJobsMetricsByDate(filteredJobs) {
     revenue: labels.map((d) => grouped[d].revenue),
     docs: labels.map((d) => grouped[d].docs),
     assignedTime: labels.map((d) => grouped[d].assignedTime),
-    jobs: labels.map((d) => grouped[d].jobs)
+    count: labels.map((d) => grouped[d].count)
   };
 }
 
@@ -818,56 +746,104 @@ function destroyCharts() {
   }
 }
 
-function renderJobsCharts(filteredJobs) {
+function renderEventsCharts(filteredRows) {
   const revenueCanvas = document.getElementById("revenueLaborChart");
   const assignedCanvas = document.getElementById("assignedTimeChart");
   if (!revenueCanvas || !assignedCanvas) return;
 
   destroyCharts();
 
-  const metrics = buildJobsMetricsByDate(filteredJobs);
+  const metrics = buildMetricsByDate(filteredRows);
 
   revenueLaborChart = new Chart(revenueCanvas, {
     type: "bar",
     data: {
       labels: metrics.labels,
       datasets: [
-        {
-          label: "Revenue",
-          data: metrics.revenue
-        },
-        {
-          label: "Linked Docs",
-          data: metrics.docs
-        }
+        { label: "Revenue", data: metrics.revenue },
+        { label: "Linked Docs", data: metrics.docs }
       ]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false
-    }
+    options: { responsive: true, maintainAspectRatio: false }
   });
 
   assignedTimeChart = new Chart(assignedCanvas, {
     type: "line",
     data: {
       labels: metrics.labels,
-      datasets: [
-        {
-          label: "Assigned Time (hrs)",
-          data: metrics.assignedTime
-        }
-      ]
+      datasets: [{ label: "Assigned Time (hrs)", data: metrics.assignedTime }]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false
-    }
+    options: { responsive: true, maintainAspectRatio: false }
   });
 }
 
-function hideChartsForWorkers() {
-  destroyCharts();
+function buildWorkerCopyText(row) {
+  const lines = [];
+
+  const addLine = (label, value) => {
+    const text = String(value || "").trim();
+    if (!text) return;
+    lines.push(`${label}: ${text}`);
+  };
+
+  addLine("Client", row.ClientName);
+  addLine("Address", row.Address);
+  addLine("Arrival time", row.ArrivalTime);
+  addLine("Estimated time", row.DisplayDuration);
+  addLine("Service type", row.ServiceType);
+  addLine("Entrance", row.Entrance);
+  addLine("Material info", row.MaterialInfo);
+  addLine("Instructions", row.Instructions);
+
+  return lines.join("\n");
+}
+
+async function copySelectedJobForWorkers() {
+  if (!selectedEvent || currentTab !== "jobs") return;
+
+  const text = buildWorkerCopyText(selectedEvent);
+
+  if (!text) {
+    copyStatusMessage = "Nothing to copy.";
+    render();
+    return;
+  }
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      fallbackCopyText(text);
+    }
+
+    copyStatusMessage = "Copied for WhatsApp.";
+    render();
+    window.setTimeout(() => {
+      copyStatusMessage = "";
+      render();
+    }, 2000);
+  } catch (error) {
+    console.error("Clipboard copy failed:", error);
+    copyStatusMessage = "Copy failed.";
+    render();
+  }
+}
+
+function fallbackCopyText(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
+function renderCopyStatus() {
+  if (!copyStatusMessage) return "";
+  return `<div class="success-box mt-3">${escapeHtml(copyStatusMessage)}</div>`;
 }
 
 function render() {
@@ -877,85 +853,80 @@ function render() {
   if (apiStatus) {
     if (currentTab === "workers") {
       apiStatus.innerText = workersLoadedFromApi ? "Yes" : "No";
-    } else if (currentTab === "mileage" || currentTab === "payroll") {
-      apiStatus.innerText = currentTab === "payroll" ? (workersLoadedFromApi ? "Yes" : "No") : "N/A";
+    } else if (currentTab === "sales") {
+      apiStatus.innerText = "N/A";
     } else {
-      apiStatus.innerText = jobsLoadedFromApi ? "Yes" : "No";
+      apiStatus.innerText = eventsLoadedFromApi ? "Yes" : "No";
     }
-  }
-
-  if (currentTab === "mileage") {
-    destroyCharts();
-    updateSummaryCardsForMileage();
-    renderMileageTab();
-    return;
-  }
-
-  if (currentTab === "payroll") {
-    destroyCharts();
-    ensurePayrollDefaults();
-    const payrollRows = getPayrollRowsForWeek();
-    const payrollSummary = buildPayrollSummary(payrollRows);
-    updateSummaryCardsForPayroll(payrollSummary);
-    renderPayrollTab(payrollRows, payrollSummary);
-    return;
   }
 
   if (currentTab === "workers") {
     const filteredWorkers = getFilteredWorkers();
     updateSummaryCardsForWorkers(filteredWorkers);
-    hideChartsForWorkers();
+    destroyCharts();
 
     if (selectedWorker) {
       const stillExists = filteredWorkers.some(
         (worker) => String(worker.WorkerID || "") === String(selectedWorker.WorkerID || "")
       );
-      if (!stillExists) {
-        selectedWorker = filteredWorkers[0] || null;
-      }
+      if (!stillExists) selectedWorker = filteredWorkers[0] || null;
     } else {
       selectedWorker = filteredWorkers[0] || null;
     }
 
-    if (currentView === "workerProfile") {
-      renderWorkerProfileView();
-    } else {
-      renderWorkersTab(filteredWorkers);
-    }
+    if (currentView === "workerProfile") renderWorkerProfileView();
+    else renderWorkersTab(filteredWorkers);
+    return;
+  }
+
+  if (currentTab === "sales") {
+    updateSummaryCardsForSales();
+    destroyCharts();
+    renderSalesTab();
     return;
   }
 
   renderCalendarChecklist();
   updateCalendarButtonLabel();
 
-  const filteredJobs = getFilteredJobs();
-  updateSummaryCardsForJobs(filteredJobs);
+  const filteredRows = getFilteredRowsByTab();
 
-  if (!chartsMinimized && filteredJobs.length > 0) {
-    renderJobsCharts(filteredJobs);
+  if (currentTab === "travel") updateSummaryCardsForTravel(filteredRows);
+  else updateSummaryCardsForEvents(filteredRows);
+
+  if (!chartsMinimized && filteredRows.length > 0) {
+    renderEventsCharts(filteredRows);
   } else {
     destroyCharts();
   }
 
-  if (selectedJob) {
-    const stillExists = filteredJobs.some(
-      (job) => String(job.EventId || "") === String(selectedJob.EventId || "")
+  if (selectedEvent) {
+    const stillExists = filteredRows.some(
+      (row) => String(row.EventId || "") === String(selectedEvent.EventId || "")
     );
-    if (!stillExists) {
-      selectedJob = filteredJobs[0] || null;
-    }
+    if (!stillExists) selectedEvent = filteredRows[0] || null;
   } else {
-    selectedJob = filteredJobs[0] || null;
+    selectedEvent = filteredRows[0] || null;
   }
 
-  renderJobsTab(filteredJobs);
+  if (currentTab === "travel") renderTravelTab(filteredRows);
+  else if (currentTab === "jobs") renderJobsTab(filteredRows);
+  else renderEventsTab(filteredRows);
 }
 
-function renderJobsTab(filteredJobs) {
+function renderEventsTab(filteredRows) {
+  renderEventsLikeTab(filteredRows, "Events", true, false);
+}
+
+function renderJobsTab(filteredRows) {
+  renderEventsLikeTab(filteredRows, "Jobs", false, true);
+}
+
+function renderEventsLikeTab(filteredRows, heading, showEventType, showCopyButton) {
   const content = document.getElementById("content");
   if (!content) return;
 
-  const selected = selectedJob || filteredJobs[0] || null;
+  const selected = selectedEvent || filteredRows[0] || null;
 
   content.innerHTML = `
     <div class="jobs-layout">
@@ -963,18 +934,18 @@ function renderJobsTab(filteredJobs) {
         <div class="panel-header">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 class="text-2xl font-semibold">Jobs</h2>
+              <h2 class="text-2xl font-semibold">${escapeHtml(heading)}</h2>
               <p class="text-sm text-slate-500">
                 Live data pulled from the Google Sheets tab named Jobs.
               </p>
               <p class="text-sm text-slate-500 mt-1">
-                Total API rows: <strong>${jobs.length}</strong> |
-                Filtered rows: <strong>${filteredJobs.length}</strong>
+                Total API rows: <strong>${eventsData.length}</strong> |
+                Filtered rows: <strong>${filteredRows.length}</strong>
               </p>
             </div>
             <div class="flex flex-wrap gap-2">
               <button class="secondary-btn" onclick="clearFilters()" type="button">Clear Filters</button>
-              <button class="secondary-btn" onclick="refreshJobs()" type="button">Refresh Jobs</button>
+              <button class="secondary-btn" onclick="refreshEvents()" type="button">Refresh ${escapeHtml(heading)}</button>
             </div>
           </div>
         </div>
@@ -986,6 +957,7 @@ function renderJobsTab(filteredJobs) {
                 <tr>
                   <th>Date</th>
                   <th>CalendarName</th>
+                  ${showEventType ? "<th>EventType</th>" : ""}
                   <th>ClientName</th>
                   <th>Zone</th>
                   <th>DisplayDuration</th>
@@ -998,6 +970,7 @@ function renderJobsTab(filteredJobs) {
                   <th>RateType</th>
                   <th>PaymentType</th>
                   <th>ServiceType</th>
+                  <th>Phone</th>
                   <th>Contract</th>
                   <th>Estimate</th>
                   <th>Invoice</th>
@@ -1007,39 +980,33 @@ function renderJobsTab(filteredJobs) {
               </thead>
               <tbody>
                 ${
-                  filteredJobs.length === 0
-                    ? `
-                      <tr>
-                        <td colspan="19" class="text-center text-slate-500">
-                          No jobs matched your filters.
-                        </td>
+                  filteredRows.length === 0
+                    ? `<tr><td colspan="${showEventType ? 21 : 20}" class="text-center text-slate-500">No rows matched your filters.</td></tr>`
+                    : filteredRows.map((row, index) => `
+                      <tr class="clickable-row" onclick="selectEventByFilteredIndex(${index})">
+                        <td title="${escapeHtml(row.Date)}">${escapeHtml(row.Date)}</td>
+                        <td title="${escapeHtml(row.CalendarName)}">${escapeHtml(row.CalendarName)}</td>
+                        ${showEventType ? `<td title="${escapeHtml(row.EventType)}"><span class="badge badge-neutral">${escapeHtml(row.EventType)}</span></td>` : ""}
+                        <td title="${escapeHtml(row.ClientName)}">${escapeHtml(row.ClientName)}</td>
+                        <td title="${escapeHtml(row.Zone)}">${escapeHtml(row.Zone)}</td>
+                        <td title="${escapeHtml(row.DisplayDuration)}">${escapeHtml(row.DisplayDuration)}</td>
+                        <td title="${escapeHtml(row.Company)}">${escapeHtml(row.Company)}</td>
+                        <td title="${escapeHtml(row.ArrivalTime)}">${escapeHtml(row.ArrivalTime)}</td>
+                        <td title="${escapeHtml(row.JobSequence)}">${escapeHtml(row.JobSequence)}</td>
+                        <td title="${escapeHtml(row.Address)}">${escapeHtml(row.Address)}</td>
+                        <td title="${escapeHtml(row.Frequency)}">${escapeHtml(row.Frequency)}</td>
+                        <td title="${escapeHtml(row.GivenPrice)}">${escapeHtml(row.GivenPrice)}</td>
+                        <td title="${escapeHtml(row.RateType)}">${escapeHtml(row.RateType)}</td>
+                        <td title="${escapeHtml(row.PaymentType)}">${escapeHtml(row.PaymentType)}</td>
+                        <td title="${escapeHtml(row.ServiceType)}">${escapeHtml(row.ServiceType)}</td>
+                        <td title="${escapeHtml(row.Phone)}">${escapeHtml(row.Phone)}</td>
+                        <td>${renderLinkCell(row.Contract)}</td>
+                        <td>${renderLinkCell(row.Estimate)}</td>
+                        <td>${renderLinkCell(row.Invoice)}</td>
+                        <td>${renderLinkCell(row.Photos)}</td>
+                        <td title="${escapeHtml(row.EventId)}">${escapeHtml(row.EventId)}</td>
                       </tr>
-                    `
-                    : filteredJobs
-                        .map((job, index) => `
-                          <tr class="clickable-row" onclick="selectJobByFilteredIndex(${index})">
-                            <td title="${escapeHtml(job.Date)}">${escapeHtml(job.Date)}</td>
-                            <td title="${escapeHtml(job.CalendarName)}">${escapeHtml(job.CalendarName)}</td>
-                            <td title="${escapeHtml(job.ClientName)}">${escapeHtml(job.ClientName)}</td>
-                            <td title="${escapeHtml(job.Zone)}">${escapeHtml(job.Zone)}</td>
-                            <td title="${escapeHtml(job.DisplayDuration)}">${escapeHtml(job.DisplayDuration)}</td>
-                            <td title="${escapeHtml(job.Company)}">${escapeHtml(job.Company)}</td>
-                            <td title="${escapeHtml(job.ArrivalTime)}">${escapeHtml(job.ArrivalTime)}</td>
-                            <td title="${escapeHtml(job.JobSequence)}">${escapeHtml(job.JobSequence)}</td>
-                            <td title="${escapeHtml(job.Address)}">${escapeHtml(job.Address)}</td>
-                            <td title="${escapeHtml(job.Frequency)}">${escapeHtml(job.Frequency)}</td>
-                            <td title="${escapeHtml(job.GivenPrice)}">${escapeHtml(job.GivenPrice)}</td>
-                            <td title="${escapeHtml(job.RateType)}">${escapeHtml(job.RateType)}</td>
-                            <td title="${escapeHtml(job.PaymentType)}">${escapeHtml(job.PaymentType)}</td>
-                            <td title="${escapeHtml(job.ServiceType)}">${escapeHtml(job.ServiceType)}</td>
-                            <td>${renderLinkCell(job.Contract)}</td>
-                            <td>${renderLinkCell(job.Estimate)}</td>
-                            <td>${renderLinkCell(job.Invoice)}</td>
-                            <td>${renderLinkCell(job.Photos)}</td>
-                            <td title="${escapeHtml(job.EventId)}">${escapeHtml(job.EventId)}</td>
-                          </tr>
-                        `)
-                        .join("")
+                    `).join("")
                 }
               </tbody>
             </table>
@@ -1049,7 +1016,10 @@ function renderJobsTab(filteredJobs) {
 
       <div class="panel">
         <div class="panel-header">
-          <h3 class="text-lg font-semibold">Job Detail</h3>
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-lg font-semibold">${escapeHtml(heading)} Detail</h3>
+            ${showCopyButton && selected ? `<button class="primary-btn" onclick="copySelectedJobForWorkers()" type="button">Copy for Workers</button>` : ""}
+          </div>
         </div>
 
         <div class="panel-body space-y-4">
@@ -1057,7 +1027,7 @@ function renderJobsTab(filteredJobs) {
             selected
               ? `
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected Job</p>
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected ${escapeHtml(heading.slice(0, -1) || "Row")}</p>
                   <p class="mt-1 text-base font-semibold">
                     ${escapeHtml(selected.ClientName)} — ${escapeHtml(selected.ServiceType)}
                   </p>
@@ -1066,6 +1036,7 @@ function renderJobsTab(filteredJobs) {
                 <div class="grid grid-cols-1 gap-3">
                   ${detailField("Date", selected.Date)}
                   ${detailField("CalendarName", selected.CalendarName)}
+                  ${detailField("EventType", selected.EventType)}
                   ${detailField("ClientName", selected.ClientName)}
                   ${detailField("Zone", selected.Zone)}
                   ${detailField("DisplayDuration", selected.DisplayDuration)}
@@ -1080,22 +1051,121 @@ function renderJobsTab(filteredJobs) {
                   ${detailField("Tip", selected.Tip)}
                   ${detailField("PaymentType", selected.PaymentType)}
                   ${detailTextarea("FinanceNotes", selected.FinanceNotes)}
+                  ${detailField("AccountManager", selected.AccountManager)}
+                  ${detailField("Commission", selected.Commission)}
                   ${detailTextarea("QcNotes", selected.QcNotes)}
                   ${detailField("ServiceType", selected.ServiceType)}
                   ${detailField("Entrance", selected.Entrance)}
                   ${detailField("MaterialInfo", selected.MaterialInfo)}
                   ${detailTextarea("Instructions", selected.Instructions)}
                   ${detailTextarea("OtherInfo", selected.OtherInfo)}
+                  ${detailField("Phone", selected.Phone)}
                   ${detailTextarea("WorkerInfo", selected.WorkerInfo)}
                   ${detailField("EventId", selected.EventId)}
                 </div>
+
+                ${showCopyButton ? renderCopyStatus() : ""}
 
                 <div class="mt-4">
                   <label class="block text-sm font-medium mb-2">Links</label>
                   ${renderLinkButtons(selected)}
                 </div>
               `
-              : `<div class="text-slate-500">No job selected.</div>`
+              : `<div class="text-slate-500">No row selected.</div>`
+          }
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTravelTab(filteredRows) {
+  const content = document.getElementById("content");
+  if (!content) return;
+
+  const selected = selectedEvent || filteredRows[0] || null;
+
+  content.innerHTML = `
+    <div class="jobs-layout">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 class="text-2xl font-semibold">Travel</h2>
+              <p class="text-sm text-slate-500">Only pickup, dropoff, and travel events.</p>
+              <p class="text-sm text-slate-500 mt-1">
+                Total travel rows: <strong>${filteredRows.length}</strong>
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="secondary-btn" onclick="clearFilters()" type="button">Clear Filters</button>
+              <button class="secondary-btn" onclick="refreshEvents()" type="button">Refresh Travel</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-body">
+          <div class="overflow-x-auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>CalendarName</th>
+                  <th>ClientName</th>
+                  <th>DisplayDuration</th>
+                  <th>ArrivalTime</th>
+                  <th>Address</th>
+                  <th>Miles</th>
+                  <th>Drive Time</th>
+                  <th>Alert</th>
+                  <th>EventId</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  filteredRows.length === 0
+                    ? `<tr><td colspan="10" class="text-center text-slate-500">No travel rows matched your filters.</td></tr>`
+                    : filteredRows.map((row, index) => `
+                      <tr class="clickable-row" onclick="selectEventByFilteredIndex(${index})">
+                        <td title="${escapeHtml(row.Date)}">${escapeHtml(row.Date)}</td>
+                        <td title="${escapeHtml(row.CalendarName)}">${escapeHtml(row.CalendarName)}</td>
+                        <td title="${escapeHtml(row.ClientName)}">${escapeHtml(row.ClientName)}</td>
+                        <td title="${escapeHtml(row.DisplayDuration)}">${escapeHtml(row.DisplayDuration)}</td>
+                        <td title="${escapeHtml(row.ArrivalTime)}">${escapeHtml(row.ArrivalTime)}</td>
+                        <td title="${escapeHtml(row.Address)}">${escapeHtml(row.Address)}</td>
+                        <td title="${escapeHtml(String(getTravelMiles(row)))}">${escapeHtml(String(getTravelMiles(row)))}</td>
+                        <td title="${escapeHtml(String(getTravelMinutes(row)))}">${escapeHtml(String(getTravelMinutes(row)))} mins</td>
+                        <td><span class="badge ${getTravelAlertBadgeClass(row)}">${escapeHtml(getTravelAlertLabel(row))}</span></td>
+                        <td title="${escapeHtml(row.EventId)}">${escapeHtml(row.EventId)}</td>
+                      </tr>
+                    `).join("")
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3 class="text-lg font-semibold">Travel Detail</h3>
+        </div>
+        <div class="panel-body space-y-4">
+          ${
+            selected
+              ? `
+                ${detailField("Date", selected.Date)}
+                ${detailField("CalendarName", selected.CalendarName)}
+                ${detailField("ClientName", selected.ClientName)}
+                ${detailField("DisplayDuration", selected.DisplayDuration)}
+                ${detailField("ArrivalTime", selected.ArrivalTime)}
+                ${detailField("Address", selected.Address)}
+                ${detailField("Miles", getTravelMiles(selected))}
+                ${detailField("Drive Time (mins)", `${getTravelMinutes(selected)}`)}
+                ${detailField("Alert", getTravelAlertLabel(selected))}
+                ${detailField("EventId", selected.EventId)}
+              `
+              : `<div class="text-slate-500">No travel row selected.</div>`
           }
         </div>
       </div>
@@ -1116,9 +1186,7 @@ function renderWorkersTab(filteredWorkers) {
           <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 class="text-2xl font-semibold">Workers</h2>
-              <p class="text-sm text-slate-500">
-                Live data pulled from the Google Sheets tab named Workers.
-              </p>
+              <p class="text-sm text-slate-500">Jobs · Availability · Payroll · Clocked Time</p>
               <p class="text-sm text-slate-500 mt-1">
                 Total API rows: <strong>${workers.length}</strong> |
                 Filtered rows: <strong>${filteredWorkers.length}</strong>
@@ -1148,30 +1216,22 @@ function renderWorkersTab(filteredWorkers) {
               <tbody>
                 ${
                   filteredWorkers.length === 0
-                    ? `
-                      <tr>
-                        <td colspan="7" class="text-center text-slate-500">
-                          No workers matched your filters.
+                    ? `<tr><td colspan="7" class="text-center text-slate-500">No workers matched your filters.</td></tr>`
+                    : filteredWorkers.map((worker, index) => `
+                      <tr class="clickable-row" onclick="selectWorkerByFilteredIndex(${index})">
+                        <td title="${escapeHtml(worker.WorkerID)}">${escapeHtml(worker.WorkerID)}</td>
+                        <td title="${escapeHtml(worker.Name)}">${escapeHtml(worker.Name)}</td>
+                        <td title="${escapeHtml(worker.Role)}">${escapeHtml(worker.Role)}</td>
+                        <td title="${escapeHtml(worker.BaseRate)}">${escapeHtml(worker.BaseRate)}</td>
+                        <td title="${escapeHtml(worker["#"])}">${escapeHtml(worker["#"])}</td>
+                        <td title="${escapeHtml(worker.DriverRate)}">${escapeHtml(worker.DriverRate)}</td>
+                        <td title="${escapeHtml(worker.Active)}">
+                          <span class="badge ${getActiveBadgeClass(normalizeActiveValue(worker.Active))}">
+                            ${normalizeActiveValue(worker.Active) ? "Active" : "Inactive"}
+                          </span>
                         </td>
                       </tr>
-                    `
-                    : filteredWorkers
-                        .map((worker, index) => `
-                          <tr class="clickable-row" onclick="selectWorkerByFilteredIndex(${index})">
-                            <td title="${escapeHtml(worker.WorkerID)}">${escapeHtml(worker.WorkerID)}</td>
-                            <td title="${escapeHtml(worker.Name)}">${escapeHtml(worker.Name)}</td>
-                            <td title="${escapeHtml(worker.Role)}">${escapeHtml(worker.Role)}</td>
-                            <td title="${escapeHtml(worker.BaseRate)}">${escapeHtml(worker.BaseRate)}</td>
-                            <td title="${escapeHtml(worker["#"])}">${escapeHtml(worker["#"])}</td>
-                            <td title="${escapeHtml(worker.DriverRate)}">${escapeHtml(worker.DriverRate)}</td>
-                            <td title="${escapeHtml(worker.Active)}">
-                              <span class="badge ${getActiveBadgeClass(normalizeActiveValue(worker.Active))}">
-                                ${normalizeActiveValue(worker.Active) ? "Active" : "Inactive"}
-                              </span>
-                            </td>
-                          </tr>
-                        `)
-                        .join("")
+                    `).join("")
                 }
               </tbody>
             </table>
@@ -1191,20 +1251,13 @@ function renderWorkersTab(filteredWorkers) {
           ${
             selected
               ? `
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected Worker</p>
-                  <p class="mt-1 text-base font-semibold">${escapeHtml(selected.Name)}</p>
-                </div>
-
-                <div class="grid grid-cols-1 gap-3">
-                  ${detailField("WorkerID", selected.WorkerID)}
-                  ${detailField("Name", selected.Name)}
-                  ${detailField("Role", selected.Role)}
-                  ${detailField("BaseRate", selected.BaseRate)}
-                  ${detailField("#", selected["#"])}
-                  ${detailField("DriverRate", selected.DriverRate)}
-                  ${detailField("Active", normalizeActiveValue(selected.Active) ? "Active" : "Inactive")}
-                </div>
+                ${detailField("WorkerID", selected.WorkerID)}
+                ${detailField("Name", selected.Name)}
+                ${detailField("Role", selected.Role)}
+                ${detailField("BaseRate", selected.BaseRate)}
+                ${detailField("#", selected["#"])}
+                ${detailField("DriverRate", selected.DriverRate)}
+                ${detailField("Active", normalizeActiveValue(selected.Active) ? "Active" : "Inactive")}
               `
               : `<div class="text-slate-500">No worker selected.</div>`
           }
@@ -1244,12 +1297,10 @@ function renderWorkerProfileView() {
             <div>
               <div class="flex items-center gap-3 flex-wrap">
                 <h2 class="text-3xl font-semibold">${escapeHtml(selectedWorker.Name)}</h2>
-                <span class="badge ${getActiveBadgeClass(isActive)}">
-                  ${isActive ? "Active" : "Inactive"}
-                </span>
+                <span class="badge ${getActiveBadgeClass(isActive)}">${isActive ? "Active" : "Inactive"}</span>
               </div>
               <p class="text-sm text-slate-500 mt-2">
-                Worker profile with job history from JobsPerWorker.
+                Jobs · Availability · Payroll · Clocked Time
               </p>
             </div>
 
@@ -1274,7 +1325,7 @@ function renderWorkerProfileView() {
               <div class="stat-value text-lg">${escapeHtml(selectedWorker.BaseRate || "-")}</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Jobs Found</div>
+              <div class="stat-label">Job Rows Found</div>
               <div class="stat-value text-lg">${workerJobs.length}</div>
             </div>
           </div>
@@ -1293,7 +1344,7 @@ function renderWorkerProfileView() {
 
       <div class="panel">
         <div class="panel-header">
-          <h3 class="text-xl font-semibold">Jobs Performed</h3>
+          <h3 class="text-xl font-semibold">Jobs</h3>
         </div>
 
         <div class="panel-body">
@@ -1323,36 +1374,28 @@ function renderWorkerProfileView() {
               <tbody>
                 ${
                   workerJobs.length === 0
-                    ? `
+                    ? `<tr><td colspan="17" class="text-center text-slate-500">No jobs found for this worker.</td></tr>`
+                    : workerJobs.map((row) => `
                       <tr>
-                        <td colspan="17" class="text-center text-slate-500">
-                          No jobs found for this worker.
-                        </td>
+                        <td title="${escapeHtml(row.Date)}">${escapeHtml(row.Date)}</td>
+                        <td title="${escapeHtml(row.CalendarName)}">${escapeHtml(row.CalendarName)}</td>
+                        <td title="${escapeHtml(row.ClientName)}">${escapeHtml(row.ClientName)}</td>
+                        <td title="${escapeHtml(row.JobSequence)}">${escapeHtml(row.JobSequence)}</td>
+                        <td title="${escapeHtml(row.Company)}">${escapeHtml(row.Company)}</td>
+                        <td title="${escapeHtml(row.Zone)}">${escapeHtml(row.Zone)}</td>
+                        <td title="${escapeHtml(row.ArrivalTime)}">${escapeHtml(row.ArrivalTime)}</td>
+                        <td title="${escapeHtml(row.DisplayDuration)}">${escapeHtml(row.DisplayDuration)}</td>
+                        <td title="${escapeHtml(row.Address)}">${escapeHtml(row.Address)}</td>
+                        <td title="${escapeHtml(row.RateType)}">${escapeHtml(row.RateType)}</td>
+                        <td title="${escapeHtml(row.AssignedTime)}">${escapeHtml(row.AssignedTime)}</td>
+                        <td title="${escapeHtml(row.Role)}">${escapeHtml(row.Role)}</td>
+                        <td title="${escapeHtml(row.Rate)}">${escapeHtml(row.Rate)}</td>
+                        <td title="${escapeHtml(formatCurrency(calculateJobPay(row)))}">${escapeHtml(formatCurrency(calculateJobPay(row)))}</td>
+                        <td title="${escapeHtml(row.WorkerZone)}">${escapeHtml(row.WorkerZone)}</td>
+                        <td title="${escapeHtml(row.ServiceType)}">${escapeHtml(row.ServiceType)}</td>
+                        <td title="${escapeHtml(row.EventId)}">${escapeHtml(row.EventId)}</td>
                       </tr>
-                    `
-                    : workerJobs
-                        .map((row) => `
-                          <tr>
-                            <td title="${escapeHtml(row.Date)}">${escapeHtml(row.Date)}</td>
-                            <td title="${escapeHtml(row.CalendarName)}">${escapeHtml(row.CalendarName)}</td>
-                            <td title="${escapeHtml(row.ClientName)}">${escapeHtml(row.ClientName)}</td>
-                            <td title="${escapeHtml(row.JobSequence)}">${escapeHtml(row.JobSequence)}</td>
-                            <td title="${escapeHtml(row.Company)}">${escapeHtml(row.Company)}</td>
-                            <td title="${escapeHtml(row.Zone)}">${escapeHtml(row.Zone)}</td>
-                            <td title="${escapeHtml(row.ArrivalTime)}">${escapeHtml(row.ArrivalTime)}</td>
-                            <td title="${escapeHtml(row.DisplayDuration)}">${escapeHtml(row.DisplayDuration)}</td>
-                            <td title="${escapeHtml(row.Address)}">${escapeHtml(row.Address)}</td>
-                            <td title="${escapeHtml(row.RateType)}">${escapeHtml(row.RateType)}</td>
-                            <td title="${escapeHtml(row.AssignedTime)}">${escapeHtml(row.AssignedTime)}</td>
-                            <td title="${escapeHtml(row.Role)}">${escapeHtml(row.Role)}</td>
-                            <td title="${escapeHtml(row.Rate)}">${escapeHtml(row.Rate)}</td>
-                            <td title="${escapeHtml(formatCurrency(calculateJobPay(row)))}">${escapeHtml(formatCurrency(calculateJobPay(row)))}</td>
-                            <td title="${escapeHtml(row.WorkerZone)}">${escapeHtml(row.WorkerZone)}</td>
-                            <td title="${escapeHtml(row.ServiceType)}">${escapeHtml(row.ServiceType)}</td>
-                            <td title="${escapeHtml(row.EventId)}">${escapeHtml(row.EventId)}</td>
-                          </tr>
-                        `)
-                        .join("")
+                    `).join("")
                 }
               </tbody>
             </table>
@@ -1363,197 +1406,25 @@ function renderWorkerProfileView() {
   `;
 }
 
-function renderMileageTab() {
+function renderSalesTab() {
   const content = document.getElementById("content");
   if (!content) return;
 
   content.innerHTML = `
     <div class="panel">
       <div class="panel-header">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 class="text-2xl font-semibold">Mileage</h2>
-            <p class="text-sm text-slate-500">
-              This section is intentionally blank for now while we plan the mileage workflow.
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button class="secondary-btn" onclick="render()" type="button">Refresh View</button>
-          </div>
-        </div>
+        <h2 class="text-2xl font-semibold">Sales</h2>
       </div>
-
       <div class="panel-body">
         <div class="success-box mb-4">
-          Mileage tab created successfully. Backend/API logic will be added later.
+          Sales tab created successfully.
         </div>
-
         <div class="blank-state-box">
           <h3 class="text-lg font-semibold mb-2">Coming Soon</h3>
           <p class="text-slate-600">
-            Later, this page can hold mileage reports, drive-time summaries, route legs,
-            map-based travel calculations, and payroll-related travel exports.
+            Later, this page can hold booked revenue, serviced revenue, rep performance,
+            commissions, and close-rate reporting.
           </p>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderPayrollTab(payrollRows, payrollSummary) {
-  const content = document.getElementById("content");
-  if (!content) return;
-
-  ensurePayrollDefaults();
-  const range = getPayrollWeekRange(payrollSelectedWeekStart);
-  const workerOptions = getPayrollWorkerOptions();
-
-  content.innerHTML = `
-    <div class="space-y-6">
-      <div class="panel">
-        <div class="panel-header">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 class="text-2xl font-semibold">Payroll</h2>
-              <p class="text-sm text-slate-500">
-                Weekly payroll shell locked to Sunday–Saturday.
-              </p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <button class="secondary-btn" onclick="render()" type="button">Refresh View</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel-body">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label class="block text-sm font-medium mb-1">Payroll Week Start (Sunday)</label>
-              <input
-                type="date"
-                class="toolbar-input"
-                value="${escapeHtml(payrollSelectedWeekStart)}"
-                onchange="onPayrollWeekChange(this.value)"
-              />
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium mb-1">Worker</label>
-              <select class="toolbar-select" onchange="onPayrollWorkerChange(this.value)">
-                <option value="">All Workers</option>
-                ${workerOptions
-                  .map((worker) => `
-                    <option
-                      value="${escapeHtml(worker.WorkerID || "")}"
-                      ${String(payrollSelectedWorkerId) === String(worker.WorkerID || "") ? "selected" : ""}
-                    >
-                      ${escapeHtml(worker.Name || "")}
-                    </option>
-                  `)
-                  .join("")}
-              </select>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium mb-1">Payroll Week End (Saturday)</label>
-              <input
-                class="toolbar-input"
-                value="${escapeHtml(range ? range.end : "")}"
-                disabled
-              />
-            </div>
-          </div>
-
-          <div class="mt-4 success-box">
-            Current payroll week:
-            <strong>${escapeHtml(range ? `${formatDateFriendly(range.start)} → ${formatDateFriendly(range.end)}` : "Not available")}</strong>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="stat-card">
-          <div class="stat-label">Jobs In Week</div>
-          <div class="stat-value text-lg">${payrollSummary.jobs}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Workers Included</div>
-          <div class="stat-value text-lg">${payrollSummary.workers}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Assigned Hours</div>
-          <div class="stat-value text-lg">${formatHours(payrollSummary.assignedHours)}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Labor Pay</div>
-          <div class="stat-value text-lg">${formatCurrency(payrollSummary.laborPay)}</div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <h3 class="text-xl font-semibold">Weekly Payroll Rows</h3>
-        </div>
-
-        <div class="panel-body">
-          <div class="success-box mb-4">
-            This is the weekly payroll shell. Mileage, drive compensation, overtime,
-            bonuses, and other adjustments can be added next.
-          </div>
-
-          <div class="overflow-x-auto">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Worker</th>
-                  <th>WorkerID</th>
-                  <th>Client</th>
-                  <th>Company</th>
-                  <th>Arrival</th>
-                  <th>AssignedTime</th>
-                  <th>Rate</th>
-                  <th>Labor Pay</th>
-                  <th>Role</th>
-                  <th>ServiceType</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${
-                  payrollRows.length === 0
-                    ? `
-                      <tr>
-                        <td colspan="11" class="text-center text-slate-500">
-                          No payroll rows found for this Sunday–Saturday week.
-                        </td>
-                      </tr>
-                    `
-                    : payrollRows
-                        .sort((a, b) => {
-                          const dateCompare = String(a.Date || "").localeCompare(String(b.Date || ""));
-                          if (dateCompare !== 0) return dateCompare;
-                          return String(a.WorkerName || "").localeCompare(String(b.WorkerName || ""));
-                        })
-                        .map((row) => `
-                          <tr>
-                            <td title="${escapeHtml(row.Date)}">${escapeHtml(row.Date)}</td>
-                            <td title="${escapeHtml(row.WorkerName)}">${escapeHtml(row.WorkerName)}</td>
-                            <td title="${escapeHtml(row.WorkerID)}">${escapeHtml(row.WorkerID)}</td>
-                            <td title="${escapeHtml(row.ClientName)}">${escapeHtml(row.ClientName)}</td>
-                            <td title="${escapeHtml(row.Company)}">${escapeHtml(row.Company)}</td>
-                            <td title="${escapeHtml(row.ArrivalTime)}">${escapeHtml(row.ArrivalTime)}</td>
-                            <td title="${escapeHtml(row.AssignedTime)}">${escapeHtml(row.AssignedTime)}</td>
-                            <td title="${escapeHtml(row.Rate)}">${escapeHtml(row.Rate)}</td>
-                            <td title="${escapeHtml(formatCurrency(calculateJobPay(row)))}">${escapeHtml(formatCurrency(calculateJobPay(row)))}</td>
-                            <td title="${escapeHtml(row.Role)}">${escapeHtml(row.Role)}</td>
-                            <td title="${escapeHtml(row.ServiceType)}">${escapeHtml(row.ServiceType)}</td>
-                          </tr>
-                        `)
-                        .join("")
-                }
-              </tbody>
-            </table>
-          </div>
         </div>
       </div>
     </div>
@@ -1603,9 +1474,10 @@ function detailTextarea(label, value) {
   `;
 }
 
-function selectJobByFilteredIndex(index) {
-  const filteredJobs = getFilteredJobs();
-  selectedJob = filteredJobs[index] || null;
+function selectEventByFilteredIndex(index) {
+  const filteredRows = getFilteredRowsByTab();
+  selectedEvent = filteredRows[index] || null;
+  copyStatusMessage = "";
   render();
 }
 
@@ -1619,18 +1491,16 @@ function clearFilters() {
   const searchInput = document.getElementById("search");
   const startDateInput = document.getElementById("startDate");
   const endDateInput = document.getElementById("endDate");
-
   const workerSearch = document.getElementById("workerSearch");
   const workerActiveFilter = document.getElementById("workerActiveFilter");
 
   if (searchInput) searchInput.value = "";
   if (startDateInput) startDateInput.value = "";
   if (endDateInput) endDateInput.value = "";
-
   if (workerSearch) workerSearch.value = "";
   if (workerActiveFilter) workerActiveFilter.value = "";
 
-  if (currentTab === "jobs") {
+  if (["events", "jobs", "travel"].includes(currentTab)) {
     selectAllCalendars();
     return;
   }
@@ -1655,7 +1525,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const searchInput = document.getElementById("search");
   const startDateInput = document.getElementById("startDate");
   const endDateInput = document.getElementById("endDate");
-
   const workerSearch = document.getElementById("workerSearch");
   const workerActiveFilter = document.getElementById("workerActiveFilter");
 
@@ -1693,5 +1562,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateLastSyncText();
   }
 
-  refreshJobs();
+  refreshEvents();
 });
