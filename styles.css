@@ -243,12 +243,20 @@ textarea:focus {
   background: #f1f5f9;
 }
 
+.primary-btn[disabled],
+.secondary-btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   border-radius: 9999px;
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 6px 12px;
+  font-size: 13px;
+  line-height: 1;
   font-weight: 600;
 }
 
@@ -259,7 +267,7 @@ textarea:focus {
 
 .badge-success {
   background: #dcfce7;
-  color: var(--success);
+  color: #166534;
 }
 
 .badge-warning {
@@ -269,7 +277,7 @@ textarea:focus {
 
 .badge-danger {
   background: #fee2e2;
-  color: var(--danger);
+  color: #991b1b;
 }
 
 .jobs-layout {
@@ -283,103 +291,6 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-th {
-  background: #f8fafc;
-  text-align: left;
-  font-size: 12px;
-  color: #475569;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-
-td {
-  padding: 12px 14px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 14px;
-  color: var(--text);
-  vertical-align: top;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.clickable-row {
-  cursor: pointer;
-}
-
-.clickable-row:hover {
-  background: #f1f5f9;
-  transition: background 0.15s ease;
-}
-
-.error-box {
-  background: #fff1f2;
-  color: #9f1239;
-  border: 1px solid #fecdd3;
-  border-radius: 12px;
-  padding: 12px 14px;
-}
-
-.success-box {
-  background: #f0fdf4;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-  border-radius: 12px;
-  padding: 12px 14px;
-}
-
-.blank-state-box {
-  border: 1px dashed var(--border);
-  border-radius: 16px;
-  padding: 24px;
-  background: linear-gradient(to right, #ffffff, #f8fafc);
-}
-
-/* Jobs table widths */
-th:nth-child(1), td:nth-child(1) { width: 100px; }
-th:nth-child(2), td:nth-child(2) { width: 180px; }
-th:nth-child(3), td:nth-child(3) { width: 180px; }
-th:nth-child(4), td:nth-child(4) { width: 120px; }
-th:nth-child(5), td:nth-child(5) { width: 80px; }
-th:nth-child(6), td:nth-child(6) { width: 120px; }
-th:nth-child(7), td:nth-child(7) { width: 120px; }
-th:nth-child(8), td:nth-child(8) { width: 100px; }
-th:nth-child(9), td:nth-child(9) { width: 260px; }
-th:nth-child(10), td:nth-child(10) { width: 100px; }
-th:nth-child(11), td:nth-child(11) { width: 100px; }
-th:nth-child(12), td:nth-child(12) { width: 120px; }
-th:nth-child(13), td:nth-child(13) { width: 120px; }
-th:nth-child(14), td:nth-child(14) { width: 100px; }
-th:nth-child(15), td:nth-child(15) { width: 160px; }
-
-th:nth-child(16), td:nth-child(16),
-th:nth-child(17), td:nth-child(17),
-th:nth-child(18), td:nth-child(18),
-th:nth-child(19), td:nth-child(19),
-th:nth-child(20), td:nth-child(20) {
-  width: 220px;
-}
-
-th:nth-child(21), td:nth-child(21) { width: 140px; }
-th:nth-child(22), td:nth-child(22) { width: 160px; }
-th:nth-child(23), td:nth-child(23) { width: 120px; }
-th:nth-child(24), td:nth-child(24) { width: 160px; }
-th:nth-child(25), td:nth-child(25) { width: 140px; }
-th:nth-child(26), td:nth-child(26) { width: 140px; }
-th:nth-child(27), td:nth-child(27) { width: 220px; }
-
-
-
-
-/* ===== Table usability upgrades ===== */
 
 .table-scroll-wrap {
   overflow-x: auto;
@@ -416,18 +327,37 @@ thead tr:nth-child(2) th {
   padding-bottom: 14px;
 }
 
-tbody td {
+th,
+td {
+  padding: 14px 16px;
+}
+
+th {
+  text-align: left;
+  font-size: 12px;
+  color: #475569;
+  border-bottom: 1px solid var(--border);
   white-space: nowrap;
+}
+
+td {
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 14px;
+  color: var(--text);
   vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-tbody tr.clickable-row {
+.clickable-row {
   cursor: pointer;
-  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.clickable-row:hover,
 tbody tr.clickable-row:hover {
   background: #f8fafc;
+  transition: background 0.15s ease;
 }
 
 tbody tr.bg-slate-100 {
@@ -437,8 +367,6 @@ tbody tr.bg-slate-100 {
 tbody tr.ring-1 {
   box-shadow: inset 0 0 0 1px #cbd5e1;
 }
-
-/* ===== Filter inputs inside tables ===== */
 
 .column-filter-input,
 .column-filter-select {
@@ -464,13 +392,28 @@ tbody tr.ring-1 {
   color: #94a3b8;
 }
 
-/* Slightly tighter table cells for wide datasets */
-th,
-td {
-  padding: 14px 16px;
+.error-box {
+  background: #fff1f2;
+  color: #9f1239;
+  border: 1px solid #fecdd3;
+  border-radius: 12px;
+  padding: 12px 14px;
 }
 
-/* ===== Modal improvements ===== */
+.success-box {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.blank-state-box {
+  border: 1px dashed var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  background: linear-gradient(to right, #ffffff, #f8fafc);
+}
 
 .event-modal-backdrop {
   position: fixed;
@@ -510,8 +453,6 @@ td {
   max-height: calc(90vh - 84px);
 }
 
-/* ===== Section cards inside detail modal ===== */
-
 .detail-section-card {
   border: 1px solid #e2e8f0;
   border-radius: 18px;
@@ -526,8 +467,6 @@ td {
   color: #475569;
   margin-bottom: 12px;
 }
-
-/* ===== Better field spacing ===== */
 
 .toolbar-input,
 .toolbar-textarea {
@@ -544,35 +483,27 @@ td {
   min-height: 90px;
 }
 
-/* ===== Badges ===== */
+/* Time Entries / Live Clocked In */
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  padding: 6px 12px;
-  font-size: 13px;
-  line-height: 1;
-  font-weight: 600;
+.live-clock-card {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
 }
 
-.badge-neutral {
-  background: #e2e8f0;
-  color: #334155;
+.leaflet-map {
+  width: 100%;
+  height: 520px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  overflow: hidden;
 }
 
-.badge-success {
-  background: #dcfce7;
-  color: #166534;
+.leaflet-container {
+  font-family: inherit;
 }
-
-.badge-danger {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-/* ===== Responsive improvement ===== */
 
 @media (max-width: 1024px) {
   .event-modal-card {
@@ -589,8 +520,27 @@ td {
   }
 }
 
-.primary-btn[disabled],
-.secondary-btn[disabled] {
-  opacity: 0.5;
-  cursor: not-allowed;
+@media (max-width: 768px) {
+  body {
+    padding: 12px;
+  }
+
+  .leaflet-map {
+    height: 380px;
+  }
+
+  .tabs-row,
+  .actions-row {
+    width: 100%;
+  }
+
+  .tab-button,
+  .secondary-btn,
+  .primary-btn {
+    width: auto;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
 }
