@@ -7,10 +7,9 @@ import {
   updateLastSyncText
 } from "./api.js";
 import {
-  getUniqueCalendars,
-  initializeCalendarSelection,
   getFilteredRowsByTab,
-  getFilteredWorkers
+  getFilteredWorkers,
+  initializeCalendarSelection
 } from "./filters.js";
 import { destroyCharts, renderEventsCharts } from "./charts.js";
 import {
@@ -18,7 +17,12 @@ import {
   renderJobsTab,
   renderTravelTab,
   updateSummaryCardsForEvents,
-  updateSummaryCardsForTravel
+  updateSummaryCardsForTravel,
+  setRouteBuilderCalendar,
+  setRouteBuilderDate,
+  buildRouteForSelectedCalendarAndDate,
+  copyRouteStops,
+  copyRouteTemplate
 } from "./events.js";
 import { renderWorkersTab, renderWorkerProfileView } from "./workers.js";
 import { copySelectedJobForWorkers } from "./copy.js";
@@ -100,40 +104,6 @@ function toggleFilterGroups() {
   applyChartsVisibility();
 }
 
-function renderCalendarChecklist() {
-  const container = document.getElementById("calendarMultiSelect");
-  if (!container) return;
-
-  const calendars = getUniqueCalendars();
-
-  container.innerHTML = calendars
-    .map((calendar) => `
-      <label class="dropdown-item">
-        <input
-          type="checkbox"
-          value="${calendar}"
-          ${state.selectedCalendars.has(calendar) ? "checked" : ""}
-          onchange="window.toggleCalendarSelection(this.value, this.checked)"
-        />
-        <span>${calendar}</span>
-      </label>
-    `)
-    .join("");
-}
-
-function updateCalendarButtonLabel() {
-  const btn = document.getElementById("calendarDropdownButton");
-  if (!btn) return;
-
-  const total = getUniqueCalendars().length;
-  const selected = state.selectedCalendars.size;
-
-  if (selected === 0) btn.innerText = "Calendars (0)";
-  else if (selected === total) btn.innerText = "All Calendars";
-  else if (selected === 1) btn.innerText = [...state.selectedCalendars][0];
-  else btn.innerText = `Calendars (${selected})`;
-}
-
 function renderSalesTab() {
   const content = document.getElementById("content");
   if (!content) return;
@@ -181,6 +151,28 @@ function updateSummaryCardsForSales() {
   if (assignedEl) assignedEl.innerText = "-";
 }
 
+function restoreColumnFilterFocus() {
+  if (!state.activeColumnFilterInput) return;
+
+  requestAnimationFrame(() => {
+    const selector = `[data-filter-tab="${state.activeColumnFilterInput.tab}"][data-filter-key="${state.activeColumnFilterInput.key}"]`;
+    const input = document.querySelector(selector);
+    if (!input) return;
+
+    input.focus();
+
+    const valueLength = String(input.value || "").length;
+    try {
+      input.setSelectionRange(valueLength, valueLength);
+    } catch (_) {}
+
+    const wrap = document.querySelector(".table-scroll-wrap");
+    if (wrap) {
+      wrap.scrollLeft = state.tableScrollLeft || 0;
+    }
+  });
+}
+
 export function render() {
   toggleFilterGroups();
 
@@ -198,6 +190,8 @@ export function render() {
 
     if (state.currentView === "workerProfile") renderWorkerProfileView();
     else renderWorkersTab(filteredWorkers);
+
+    restoreColumnFilterFocus();
     return;
   }
 
@@ -207,9 +201,6 @@ export function render() {
     renderSalesTab();
     return;
   }
-
-  renderCalendarChecklist();
-  updateCalendarButtonLabel();
 
   const filteredRows = getFilteredRowsByTab();
 
@@ -226,6 +217,8 @@ export function render() {
   if (state.currentTab === "travel") renderTravelTab(filteredRows);
   else if (state.currentTab === "jobs") renderJobsTab(filteredRows);
   else renderEventsTab(filteredRows);
+
+  restoreColumnFilterFocus();
 }
 
 async function refreshEvents() {
@@ -266,6 +259,7 @@ function setTab(tab, event) {
   state.currentView = "main";
   state.copyStatusMessage = "";
   state.eventDetailOpen = false;
+  state.activeColumnFilterInput = null;
 
   document.querySelectorAll(".tab-button").forEach((btn) => btn.classList.remove("active"));
   if (event && event.target) event.target.classList.add("active");
@@ -291,38 +285,6 @@ function toggleChartsVisibility() {
   render();
 }
 
-function toggleCalendarDropdown() {
-  const dropdown = document.getElementById("calendarDropdown");
-  const button = document.getElementById("calendarDropdownButton");
-  if (!dropdown || !button) return;
-
-  const willOpen = dropdown.classList.contains("hidden");
-  dropdown.classList.toggle("hidden");
-  button.setAttribute("aria-expanded", String(willOpen));
-}
-
-function toggleCalendarSelection(calendarName, isChecked) {
-  if (isChecked) state.selectedCalendars.add(calendarName);
-  else state.selectedCalendars.delete(calendarName);
-
-  updateCalendarButtonLabel();
-  render();
-}
-
-function selectAllCalendars() {
-  getUniqueCalendars().forEach((name) => state.selectedCalendars.add(name));
-  renderCalendarChecklist();
-  updateCalendarButtonLabel();
-  render();
-}
-
-function clearCalendarSelection() {
-  state.selectedCalendars.clear();
-  renderCalendarChecklist();
-  updateCalendarButtonLabel();
-  render();
-}
-
 function clearFilters() {
   const ids = ["search", "startDate", "endDate", "workerSearch"];
   ids.forEach((id) => {
@@ -333,11 +295,27 @@ function clearFilters() {
   const workerActiveFilter = document.getElementById("workerActiveFilter");
   if (workerActiveFilter) workerActiveFilter.value = "";
 
-  if (["events", "jobs", "travel"].includes(state.currentTab)) {
-    selectAllCalendars();
-    return;
+  render();
+}
+
+function setColumnFilter(tabName, key, value) {
+  if (!state.columnFilters[tabName]) state.columnFilters[tabName] = {};
+  state.columnFilters[tabName][key] = value;
+  render();
+}
+
+function rememberColumnFilterFocus(tabName, key) {
+  const wrap = document.querySelector(".table-scroll-wrap");
+  if (wrap) {
+    state.tableScrollLeft = wrap.scrollLeft;
   }
 
+  state.activeColumnFilterInput = { tab: tabName, key };
+}
+
+function clearColumnFilters(tabName) {
+  state.columnFilters[tabName] = {};
+  state.activeColumnFilterInput = null;
   render();
 }
 
@@ -404,13 +382,40 @@ function refreshCurrentTab() {
   refreshEvents();
 }
 
+function setRouteBuilderCalendarValue(value) {
+  setRouteBuilderCalendar(value);
+}
+
+function setRouteBuilderDateValue(value) {
+  setRouteBuilderDate(value);
+}
+
+function buildRouteAndRender() {
+  buildRouteForSelectedCalendarAndDate();
+  render();
+}
+
+function openBuiltRouteInMaps() {
+  if (!state.routeBuilder.mapsUrl) return;
+  window.open(state.routeBuilder.mapsUrl, "_blank", "noopener,noreferrer");
+}
+
+async function copyBuiltRouteStops() {
+  await copyRouteStops();
+  render();
+}
+
+async function copyBuiltRouteTemplate() {
+  await copyRouteTemplate();
+  render();
+}
+
 window.setTab = setTab;
 window.toggleChartsVisibility = toggleChartsVisibility;
-window.toggleCalendarDropdown = toggleCalendarDropdown;
-window.toggleCalendarSelection = toggleCalendarSelection;
-window.selectAllCalendars = selectAllCalendars;
-window.clearCalendarSelection = clearCalendarSelection;
 window.clearFilters = clearFilters;
+window.setColumnFilter = setColumnFilter;
+window.rememberColumnFilterFocus = rememberColumnFilterFocus;
+window.clearColumnFilters = clearColumnFilters;
 window.selectEventByFilteredIndex = selectEventByFilteredIndex;
 window.closeEventDetail = closeEventDetail;
 window.selectWorkerByFilteredIndex = selectWorkerByFilteredIndex;
@@ -421,18 +426,12 @@ window.refreshEvents = refreshEvents;
 window.refreshWorkers = refreshWorkers;
 window.copySelectedJobForWorkers = () => copySelectedJobForWorkers(render);
 
-document.addEventListener("click", function (e) {
-  const dropdown = document.getElementById("calendarDropdown");
-  const button = document.getElementById("calendarDropdownButton");
-
-  if (!dropdown || !button) return;
-  if (dropdown.classList.contains("hidden")) return;
-
-  if (!dropdown.contains(e.target) && !button.contains(e.target)) {
-    dropdown.classList.add("hidden");
-    button.setAttribute("aria-expanded", "false");
-  }
-});
+window.setRouteBuilderCalendar = setRouteBuilderCalendarValue;
+window.setRouteBuilderDate = setRouteBuilderDateValue;
+window.buildRouteAndRender = buildRouteAndRender;
+window.openBuiltRouteInMaps = openBuiltRouteInMaps;
+window.copyBuiltRouteStops = copyBuiltRouteStops;
+window.copyBuiltRouteTemplate = copyBuiltRouteTemplate;
 
 document.addEventListener("DOMContentLoaded", async () => {
   const searchInput = document.getElementById("search");
