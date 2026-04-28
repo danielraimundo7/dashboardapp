@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cleaning Operations Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-slate-50 min-h-screen p-6">
+  <div class="max-w-[1900px] mx-auto">
+    <div class="top-shell mb-6">
+      <div class="top-shell-left">
+        <h1 class="text-3xl font-bold mb-2">Cleaning Operations Dashboard</h1>
+        <p class="text-slate-500">
+          Vanilla JS app pulling calendar, worker, and sales data from Google Sheets through Apps Script.
+        </p>
+        <p class="text-sm text-slate-500 mt-2">
+          Last calendar → spreadsheet sync:
+          <span id="lastSyncText">Loading...</span>
+        </p>
+      </div>
+
+      <div class="top-shell-right">
+        <div class="tabs-row">
+          <button onclick="setTab('events', event)" class="tab-button active" type="button">Events</button>
+          <button onclick="setTab('jobs', event)" class="tab-button" type="button">Jobs</button>
+          <button onclick="setTab('travel', event)" class="tab-button" type="button">Travel</button>
+          <button onclick="setTab('workers', event)" class="tab-button" type="button">Workers</button>
+          <button onclick="setTab('sales', event)" class="tab-button" type="button">Sales</button>
+        </div>
+
+        <div class="actions-row">
+          <button class="secondary-btn" onclick="refreshCurrentTab()" type="button">
+            Refresh Current Tab
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event / Job / Travel Filters -->
+    <div id="eventFilters" class="space-y-4 mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <input
+          id="search"
+          placeholder="Search events, jobs, client name..."
+          class="w-full p-3 border rounded-xl"
+        />
+        <input
+          id="startDate"
+          type="date"
+          class="w-full p-3 border rounded-xl"
+        />
+        <input
+          id="endDate"
+          type="date"
+          class="w-full p-3 border rounded-xl"
+        />
+      </div>
+    </div>
+
+    <!-- Workers Filters -->
+    <div id="workersFilters" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 hidden">
+      <input
+        id="workerSearch"
+        placeholder="Search worker name or ID..."
+        class="w-full p-3 border rounded-xl"
+      />
+      <select id="workerActiveFilter" class="w-full p-3 border rounded-xl bg-white">
+        <option value="">All Workers</option>
+        <option value="active">Active Only</option>
+        <option value="inactive">Inactive Only</option>
+      </select>
+      <div></div>
+    </div>
+
+    <div class="flex gap-2 mb-6">
+      <button class="secondary-btn" onclick="clearFilters()" type="button">
+        Clear Filters
+      </button>
+    </div>
+
+    <!-- Summary cards -->
+    <div id="summaryCards" class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+      <div class="stat-card">
+        <div class="stat-label" id="primaryCountLabel">Events</div>
+        <div class="stat-value" id="jobCount">0</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Revenue / Pay</div>
+        <div class="stat-value" id="revenueTotal">$0.00</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Secondary</div>
+        <div class="stat-value" id="laborTotal">0</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Assigned Time</div>
+        <div class="stat-value" id="assignedTimeTotal">0.00 hrs</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Loaded From API</div>
+        <div class="stat-value" id="apiStatus">No</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div id="dashboardChartsShell" class="mb-6">
+      <div class="charts-toolbar mb-3">
+        <button
+          id="toggleChartsBtn"
+          class="secondary-btn"
+          onclick="toggleChartsVisibility()"
+          type="button"
+        >
+          Hide Graphs
+        </button>
+      </div>
+
+      <div id="dashboardCharts" class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="text-lg font-semibold">Revenue vs Linked Docs</h3>
+          </div>
+          <div class="panel-body chart-panel">
+            <canvas id="revenueLaborChart"></canvas>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="text-lg font-semibold">Assigned Time by Date</h3>
+          </div>
+          <div class="panel-body chart-panel">
+            <canvas id="assignedTimeChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="content"></div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
