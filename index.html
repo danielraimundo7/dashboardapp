@@ -4,10 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cleaning Operations Dashboard</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+  </script>
+
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body class="bg-slate-50 min-h-screen p-6">
   <div class="max-w-[1900px] mx-auto">
     <div class="top-shell mb-6">
@@ -27,6 +38,7 @@
           <button onclick="setTab('events', event)" class="tab-button active" type="button">Events</button>
           <button onclick="setTab('jobs', event)" class="tab-button" type="button">Jobs</button>
           <button onclick="setTab('travel', event)" class="tab-button" type="button">Travel</button>
+          <button onclick="setTab('timeEntries', event)" class="tab-button" type="button">Time Entries</button>
           <button onclick="setTab('workers', event)" class="tab-button" type="button">Workers</button>
           <button onclick="setTab('sales', event)" class="tab-button" type="button">Sales</button>
         </div>
@@ -39,12 +51,12 @@
       </div>
     </div>
 
-    <!-- Event / Job / Travel Filters -->
+    <!-- Event / Job / Travel / Time Entry Filters -->
     <div id="eventFilters" class="space-y-4 mb-4">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <input
           id="search"
-          placeholder="Search events, jobs, client name..."
+          placeholder="Search events, jobs, workers, client name..."
           class="w-full p-3 border rounded-xl"
         />
         <input
