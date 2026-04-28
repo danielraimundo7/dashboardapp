@@ -87,3 +87,20 @@ export async function loadJobsPerWorkerFromApi() {
   state.jobsPerWorker = Array.isArray(result.data) ? result.data : [];
   state.jobsPerWorkerLoadedFromApi = true;
 }
+
+export async function loadTimeEntriesFromApi() {
+  const url = `${API_BASE_URL}?action=getTimeEntries&_=${Date.now()}`;
+  const response = await fetch(url, { method: "GET", cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} while loading TimeEntries.`);
+  }
+
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(result.error || "Failed to load TimeEntries data.");
+  }
+
+  state.timeEntries = Array.isArray(result.data) ? result.data : [];
+  state.timeEntriesLoadedFromApi = true;
+}
