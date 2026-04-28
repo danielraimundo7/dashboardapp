@@ -1,9 +1,17 @@
 import { state } from "./state.js";
+import { normalizeActiveValue } from "./utils.js";
 
 export function getUniqueCalendars() {
   return [...new Set(
     state.eventsData
       .map((row) => String(row.CalendarName || "").trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
+}
+
+export function getUniqueColumnValues(rows, key) {
+  return [...new Set(
+    rows.map((row) => String(row[key] || "").trim())
       .filter(Boolean)
   )].sort((a, b) => a.localeCompare(b));
 }
@@ -55,22 +63,55 @@ export function getBaseFilteredEvents() {
     const matchesStartDate = !startDateValue || (rowDate && rowDate >= startDateValue);
     const matchesEndDate = !endDateValue || (rowDate && rowDate <= endDateValue);
 
-    const matchesCalendar =
-      state.selectedCalendars.size === 0
-        ? true
-        : state.selectedCalendars.has(String(row.CalendarName || "").trim());
+    return matchesSearch && matchesStartDate && matchesEndDate;
+  });
+}
 
-    return matchesSearch && matchesStartDate && matchesEndDate && matchesCalendar;
+function matchesSingleFilter(rowValueRaw, filterValueRaw) {
+  const filterValue = String(filterValueRaw ?? "").trim();
+  if (!filterValue) return true;
+
+  const rowValue = String(rowValueRaw ?? "").trim();
+
+  if (filterValue === "__BLANK__") {
+    return rowValue === "";
+  }
+
+  if (filterValue === "__NONBLANK__") {
+    return rowValue !== "";
+  }
+
+  return rowValue.toLowerCase().includes(filterValue.toLowerCase());
+}
+
+function matchesColumnFilters(row, filters) {
+  const entries = Object.entries(filters || {}).filter(([, value]) => String(value ?? "").trim() !== "");
+  if (!entries.length) return true;
+
+  return entries.every(([key, filterValue]) => {
+    if (key === "DriveTime") {
+      const driveMinutes = String(row.DisplayDuration || "");
+      return matchesSingleFilter(driveMinutes, filterValue);
+    }
+
+    if (key === "Alert") {
+      const titleText = `${row.ClientName || ""} ${row.JobSequence || ""}`;
+      return matchesSingleFilter(titleText, filterValue);
+    }
+
+    return matchesSingleFilter(row[key], filterValue);
   });
 }
 
 export function getFilteredRowsByTab() {
   const base = getBaseFilteredEvents();
+  let rows = base;
 
-  if (state.currentTab === "jobs") return base.filter(isJobEvent);
-  if (state.currentTab === "travel") return base.filter(isTravelEvent);
+  if (state.currentTab === "jobs") rows = base.filter(isJobEvent);
+  else if (state.currentTab === "travel") rows = base.filter(isTravelEvent);
 
-  return base;
+  const tabFilters = state.columnFilters[state.currentTab] || {};
+  return rows.filter((row) => matchesColumnFilters(row, tabFilters));
 }
 
 export function getFilteredWorkers() {
@@ -80,10 +121,10 @@ export function getFilteredWorkers() {
   const searchValue = workerSearch ? workerSearch.value.toLowerCase().trim() : "";
   const activeValue = workerActiveFilter ? workerActiveFilter.value : "";
 
-  return state.workers.filter((worker) => {
+  const base = state.workers.filter((worker) => {
     const searchableText = JSON.stringify(worker).toLowerCase();
     const matchesSearch = !searchValue || searchableText.includes(searchValue);
-    const isActive = String(worker.Active || "").toLowerCase().includes("active") || String(worker.Active || "").toLowerCase() === "true";
+    const isActive = normalizeActiveValue(worker.Active);
 
     const matchesActive =
       !activeValue ||
@@ -92,4 +133,7 @@ export function getFilteredWorkers() {
 
     return matchesSearch && matchesActive;
   });
+
+  const workerFilters = state.columnFilters.workers || {};
+  return base.filter((worker) => matchesColumnFilters(worker, workerFilters));
 }
