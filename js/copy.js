@@ -1,5 +1,8 @@
 import { state } from "./state.js";
 
+/* =========================
+   BUILD WORKER COPY TEXT
+========================= */
 export function buildWorkerCopyText(row) {
   const lines = [];
 
@@ -9,18 +12,41 @@ export function buildWorkerCopyText(row) {
     lines.push(`${label}: ${text}`);
   };
 
+  lines.push("🧹 JOB DETAILS");
+  lines.push("");
+
   addLine("Client", row.ClientName);
   addLine("Address", row.Address);
-  addLine("Arrival time", row.ArrivalTime);
-  addLine("Estimated time", row.DisplayDuration);
+  addLine("Arrival time", row.ArrivalTime || row.RequestedTime);
+  addLine("Estimated time", row.DisplayDuration || row.AssignedTime);
   addLine("Service type", row.ServiceType);
+
+  lines.push("");
+
   addLine("Entrance", row.Entrance);
   addLine("Material info", row.MaterialInfo);
-  addLine("Instructions", row.Instructions);
+
+  if (row.Instructions) {
+    lines.push("");
+    lines.push("Instructions:");
+    lines.push(row.Instructions);
+  }
+
+  if (row.OtherInfo) {
+    lines.push("");
+    lines.push("Other Info:");
+    lines.push(row.OtherInfo);
+  }
+
+  lines.push("");
+  addLine("Clock-in link", row.JobLink);
 
   return lines.join("\n");
 }
 
+/* =========================
+   FALLBACK COPY METHOD
+========================= */
 function fallbackCopyText(text) {
   const textarea = document.createElement("textarea");
   textarea.value = text;
@@ -33,6 +59,9 @@ function fallbackCopyText(text) {
   document.body.removeChild(textarea);
 }
 
+/* =========================
+   MAIN COPY FUNCTION
+========================= */
 export async function copySelectedJobForWorkers(onDone) {
   if (!state.selectedEvent || state.currentTab !== "jobs") return;
 
@@ -40,7 +69,7 @@ export async function copySelectedJobForWorkers(onDone) {
 
   if (!text) {
     state.copyStatusMessage = "Nothing to copy.";
-    onDone();
+    if (onDone) onDone();
     return;
   }
 
@@ -52,19 +81,22 @@ export async function copySelectedJobForWorkers(onDone) {
     }
 
     state.copyStatusMessage = "Copied for WhatsApp.";
-    onDone();
+    if (onDone) onDone();
 
-    window.setTimeout(() => {
+    setTimeout(() => {
       state.copyStatusMessage = "";
-      onDone();
+      if (onDone) onDone();
     }, 2000);
   } catch (error) {
     console.error("Clipboard copy failed:", error);
     state.copyStatusMessage = "Copy failed.";
-    onDone();
+    if (onDone) onDone();
   }
 }
 
+/* =========================
+   STATUS UI
+========================= */
 export function renderCopyStatus() {
   if (!state.copyStatusMessage) return "";
   return `<div class="success-box mt-3">${state.copyStatusMessage}</div>`;
