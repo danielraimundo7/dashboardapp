@@ -20,16 +20,48 @@ export function getSelectedWorkerJobs() {
       const dateB = String(b.Date || "");
       if (dateA !== dateB) return dateB.localeCompare(dateA);
 
-      const timeA = String(a.ArrivalTime || "");
-      const timeB = String(b.ArrivalTime || "");
+      const timeA = String(a.RequestedTime || "");
+      const timeB = String(b.RequestedTime || "");
       return timeA.localeCompare(timeB);
     });
 }
 
 export function calculateJobPay(row) {
-  const assigned = Number(row.AssignedTime || 0);
+  const assigned = Number(row.AssignedTimeDecimal || 0);
   const rate = Number(row.Rate || 0);
   return assigned * rate;
+}
+
+function getSelectedWorkerRowClass(worker) {
+  if (!state.selectedWorker) return "";
+  return String(state.selectedWorker.WorkerID || "") === String(worker.WorkerID || "")
+    ? "bg-slate-100 ring-1 ring-slate-300"
+    : "";
+}
+
+function renderWorkerColumnFilterInput(key, placeholder = "Filter...") {
+  const value = state.columnFilters?.workers?.[key] || "";
+  return `
+    <input
+      type="text"
+      class="column-filter-input"
+      value="${escapeHtml(value)}"
+      placeholder="${escapeHtml(placeholder)}"
+      oninput="window.setColumnFilter('workers', '${key}', this.value)"
+      onclick="event.stopPropagation()"
+    />
+  `;
+}
+
+function renderStatusBadge(status) {
+  const normalized = String(status || "").trim().toUpperCase();
+
+  let cls = "badge-neutral";
+  if (normalized === "CANCELED") cls = "badge-danger";
+  else if (normalized === "COMPLETED") cls = "badge-success";
+  else if (normalized === "TENTATIVE") cls = "badge-warning";
+
+  return `<span class="badge ${cls}">${escapeHtml(status || "")}</span>`;
 }
 
 export function renderWorkersTab(filteredWorkers) {
@@ -51,11 +83,16 @@ export function renderWorkersTab(filteredWorkers) {
                 Filtered rows: <strong>${filteredWorkers.length}</strong>
               </p>
             </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="secondary-btn" onclick="window.clearColumnFilters('workers')" type="button">Clear Column Filters</button>
+              <button class="secondary-btn" onclick="window.clearFilters()" type="button">Clear Filters</button>
+              <button class="secondary-btn" onclick="window.refreshWorkers()" type="button">Refresh Workers</button>
+            </div>
           </div>
         </div>
 
         <div class="panel-body">
-          <div class="overflow-x-auto">
+          <div class="table-scroll-wrap">
             <table>
               <thead>
                 <tr>
@@ -67,13 +104,22 @@ export function renderWorkersTab(filteredWorkers) {
                   <th>DriverRate</th>
                   <th>Active</th>
                 </tr>
+                <tr>
+                  <th>${renderWorkerColumnFilterInput("WorkerID")}</th>
+                  <th>${renderWorkerColumnFilterInput("Name")}</th>
+                  <th>${renderWorkerColumnFilterInput("Role")}</th>
+                  <th>${renderWorkerColumnFilterInput("BaseRate")}</th>
+                  <th>${renderWorkerColumnFilterInput("#")}</th>
+                  <th>${renderWorkerColumnFilterInput("DriverRate")}</th>
+                  <th>${renderWorkerColumnFilterInput("Active")}</th>
+                </tr>
               </thead>
               <tbody>
                 ${
                   filteredWorkers.length === 0
                     ? `<tr><td colspan="7" class="text-center text-slate-500">No workers matched your filters.</td></tr>`
                     : filteredWorkers.map((worker, index) => `
-                      <tr class="clickable-row" onclick="window.selectWorkerByFilteredIndex(${index})">
+                      <tr class="clickable-row ${getSelectedWorkerRowClass(worker)}" onclick="window.selectWorkerByFilteredIndex(${index})">
                         <td>${escapeHtml(worker.WorkerID)}</td>
                         <td>${escapeHtml(worker.Name)}</td>
                         <td>${escapeHtml(worker.Role)}</td>
@@ -192,21 +238,20 @@ export function renderWorkerProfileView() {
         </div>
 
         <div class="panel-body">
-          <div class="overflow-x-auto">
+          <div class="table-scroll-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Date</th>
+                  <th>Status</th>
                   <th>CalendarName</th>
                   <th>ClientName</th>
-                  <th>JobSequence</th>
                   <th>Company</th>
                   <th>Zone</th>
-                  <th>ArrivalTime</th>
-                  <th>DisplayDuration</th>
+                  <th>RequestedTime</th>
+                  <th>AssignedTime</th>
                   <th>Address</th>
                   <th>RateType</th>
-                  <th>AssignedTime</th>
                   <th>Role</th>
                   <th>Rate</th>
                   <th>Job Pay</th>
@@ -218,20 +263,19 @@ export function renderWorkerProfileView() {
               <tbody>
                 ${
                   workerJobs.length === 0
-                    ? `<tr><td colspan="17" class="text-center text-slate-500">No jobs found for this worker.</td></tr>`
+                    ? `<tr><td colspan="16" class="text-center text-slate-500">No jobs found for this worker.</td></tr>`
                     : workerJobs.map((row) => `
                       <tr>
                         <td>${escapeHtml(row.Date)}</td>
+                        <td>${renderStatusBadge(row.Status)}</td>
                         <td>${escapeHtml(row.CalendarName)}</td>
                         <td>${escapeHtml(row.ClientName)}</td>
-                        <td>${escapeHtml(row.JobSequence)}</td>
                         <td>${escapeHtml(row.Company)}</td>
                         <td>${escapeHtml(row.Zone)}</td>
-                        <td>${escapeHtml(row.ArrivalTime)}</td>
-                        <td>${escapeHtml(row.DisplayDuration)}</td>
+                        <td>${escapeHtml(row.RequestedTime)}</td>
+                        <td>${escapeHtml(row.AssignedTime)}</td>
                         <td>${escapeHtml(row.Address)}</td>
                         <td>${escapeHtml(row.RateType)}</td>
-                        <td>${escapeHtml(row.AssignedTime)}</td>
                         <td>${escapeHtml(row.Role)}</td>
                         <td>${escapeHtml(row.Rate)}</td>
                         <td>${escapeHtml(formatCurrency(calculateJobPay(row)))}</td>
