@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="bg-slate-50 min-h-screen p-6">
-  <div class="max-w-[1700px] mx-auto">
+  <div class="max-w-[1900px] mx-auto">
     <div class="top-shell mb-6">
       <div class="top-shell-left">
         <h1 class="text-3xl font-bold mb-2">Cleaning Operations Dashboard</h1>
@@ -30,46 +30,43 @@
           <button onclick="setTab('workers', event)" class="tab-button" type="button">Workers</button>
           <button onclick="setTab('sales', event)" class="tab-button" type="button">Sales</button>
         </div>
+
         <div class="actions-row">
-          <button class="secondary-btn" onclick="refreshCurrentTab()" type="button">Refresh Current Tab</button>
+          <button class="secondary-btn" onclick="refreshCurrentTab()" type="button">
+            Refresh Current Tab
+          </button>
         </div>
       </div>
     </div>
 
     <!-- Event / Job / Travel Filters -->
     <div id="eventFilters" class="space-y-4 mb-4">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <input id="search" placeholder="Search events, jobs, client name..." class="w-full p-3 border rounded-xl" />
-        <input id="startDate" type="date" class="w-full p-3 border rounded-xl" />
-        <input id="endDate" type="date" class="w-full p-3 border rounded-xl" />
-
-        <div class="relative">
-          <button
-            id="calendarDropdownButton"
-            onclick="toggleCalendarDropdown()"
-            class="dropdown-btn w-full"
-            type="button"
-            aria-haspopup="true"
-            aria-expanded="false"
-          >
-            All Calendars
-          </button>
-
-          <div id="calendarDropdown" class="dropdown-panel hidden">
-            <div class="dropdown-actions">
-              <button type="button" onclick="selectAllCalendars()">Select All</button>
-              <button type="button" onclick="clearCalendarSelection()">Clear All</button>
-            </div>
-
-            <div id="calendarMultiSelect" class="dropdown-list"></div>
-          </div>
-        </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <input
+          id="search"
+          placeholder="Search events, jobs, client name..."
+          class="w-full p-3 border rounded-xl"
+        />
+        <input
+          id="startDate"
+          type="date"
+          class="w-full p-3 border rounded-xl"
+        />
+        <input
+          id="endDate"
+          type="date"
+          class="w-full p-3 border rounded-xl"
+        />
       </div>
     </div>
 
     <!-- Workers Filters -->
     <div id="workersFilters" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 hidden">
-      <input id="workerSearch" placeholder="Search worker name or ID..." class="w-full p-3 border rounded-xl" />
+      <input
+        id="workerSearch"
+        placeholder="Search worker name or ID..."
+        class="w-full p-3 border rounded-xl"
+      />
       <select id="workerActiveFilter" class="w-full p-3 border rounded-xl bg-white">
         <option value="">All Workers</option>
         <option value="active">Active Only</option>
@@ -79,7 +76,9 @@
     </div>
 
     <div class="flex gap-2 mb-6">
-      <button class="secondary-btn" onclick="clearFilters()" type="button">Clear Filters</button>
+      <button class="secondary-btn" onclick="clearFilters()" type="button">
+        Clear Filters
+      </button>
     </div>
 
     <!-- Summary cards -->
@@ -88,18 +87,22 @@
         <div class="stat-label" id="primaryCountLabel">Events</div>
         <div class="stat-value" id="jobCount">0</div>
       </div>
+
       <div class="stat-card">
         <div class="stat-label">Revenue / Pay</div>
         <div class="stat-value" id="revenueTotal">$0.00</div>
       </div>
+
       <div class="stat-card">
         <div class="stat-label">Secondary</div>
         <div class="stat-value" id="laborTotal">0</div>
       </div>
+
       <div class="stat-card">
         <div class="stat-label">Assigned Time</div>
         <div class="stat-value" id="assignedTimeTotal">0.00 hrs</div>
       </div>
+
       <div class="stat-card">
         <div class="stat-label">Loaded From API</div>
         <div class="stat-value" id="apiStatus">No</div>
@@ -109,7 +112,12 @@
     <!-- Charts -->
     <div id="dashboardChartsShell" class="mb-6">
       <div class="charts-toolbar mb-3">
-        <button id="toggleChartsBtn" class="secondary-btn" onclick="toggleChartsVisibility()" type="button">
+        <button
+          id="toggleChartsBtn"
+          class="secondary-btn"
+          onclick="toggleChartsVisibility()"
+          type="button"
+        >
           Hide Graphs
         </button>
       </div>
