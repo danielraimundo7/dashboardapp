@@ -8,11 +8,52 @@ function cleanText(value) {
   return String(value || "").trim();
 }
 
+function getTodayDateInput() {
+  const d = new Date();
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return local.toISOString().slice(0, 10);
+}
+
+function ensureFieldMapDefaults() {
+  if (!state.fieldMap) {
+    state.fieldMap = {
+      selectedWorkerId: "",
+      selectedDate: "",
+      showOpenOnly: false
+    };
+  }
+
+  if (!state.fieldMap.selectedDate) {
+    state.fieldMap.selectedDate = getTodayDateInput();
+  }
+
+  if (typeof state.fieldMap.showOpenOnly !== "boolean") {
+    state.fieldMap.showOpenOnly = false;
+  }
+}
+
 function parseDateTime(value) {
   if (!value) return null;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d;
+}
+
+function getDateOnlyFromValue(value) {
+  const d = parseDateTime(value);
+  if (!d) return cleanText(value).slice(0, 10);
+
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return local.toISOString().slice(0, 10);
+}
+
+function getEntryServiceDate(entry) {
+  return (
+    cleanText(entry.SessionDate) ||
+    cleanText(entry.Date) ||
+    getDateOnlyFromValue(entry.ClockInTime) ||
+    getDateOnlyFromValue(entry.ClockOutTime)
+  );
 }
 
 function minutesBetween(start, end) {
@@ -61,10 +102,29 @@ function getEntryLng(entry) {
   return toNumber(entry.ClockOutLongitude) || toNumber(entry.ClockInLongitude);
 }
 
-function getLatestEntryByWorker() {
+function getFilteredFieldMapEntries() {
+  ensureFieldMapDefaults();
+
+  const selectedDate = cleanText(state.fieldMap.selectedDate);
+  const showOpenOnly = Boolean(state.fieldMap.showOpenOnly);
+
+  let rows = state.timeEntries || [];
+
+  if (showOpenOnly) {
+    return rows
+      .filter((entry) => cleanText(entry.Status).toUpperCase() === "OPEN")
+      .sort((a, b) => {
+        const aTime = getEntryLastActionTime(a);
+        const bTime = getEntryLastActionTime(b);
+        return (bTime?.getTime() || 0) - (aTime?.getTime() || 0);
+      });
+  }
+
+  rows = rows.filter((entry) => getEntryServiceDate(entry) === selectedDate);
+
   const byWorker = new Map();
 
-  (state.timeEntries || []).forEach((entry) => {
+  rows.forEach((entry) => {
     const workerId = cleanText(entry.WorkerID);
     if (!workerId) return;
 
@@ -204,6 +264,10 @@ function getMarkerPopupHtml(entry) {
       </div>
 
       <div style="margin-bottom:6px;">
+        <strong>Service Date:</strong> ${escapeHtml(getEntryServiceDate(entry))}
+      </div>
+
+      <div style="margin-bottom:6px;">
         <strong>Client:</strong> ${escapeHtml(entry.ClientName || "")}
       </div>
 
@@ -307,6 +371,11 @@ function renderWorkerStatusCard(entry) {
         </div>
 
         <div>
+          <div class="stat-label">Service Date</div>
+          <div>${escapeHtml(getEntryServiceDate(entry))}</div>
+        </div>
+
+        <div>
           <div class="stat-label">Client</div>
           <div>${escapeHtml(entry.ClientName || "")}</div>
         </div>
@@ -314,6 +383,11 @@ function renderWorkerStatusCard(entry) {
         <div>
           <div class="stat-label">Calendar</div>
           <div>${escapeHtml(entry.CalendarName || "")}</div>
+        </div>
+
+        <div>
+          <div class="stat-label">Assigned Time</div>
+          <div>${escapeHtml(entry.AssignedTime || "")}</div>
         </div>
 
         <div class="md:col-span-2">
@@ -340,22 +414,46 @@ function renderWorkerStatusCard(entry) {
   `;
 }
 
+export function setFieldMapDate(value) {
+  ensureFieldMapDefaults();
+  state.fieldMap.selectedDate = value || getTodayDateInput();
+  state.fieldMap.showOpenOnly = false;
+}
+
+export function showFieldMapOpenOnly() {
+  ensureFieldMapDefaults();
+  state.fieldMap.showOpenOnly = true;
+}
+
+export function showFieldMapToday() {
+  ensureFieldMapDefaults();
+  state.fieldMap.selectedDate = getTodayDateInput();
+  state.fieldMap.showOpenOnly = false;
+}
+
 export function renderFieldMapTab() {
   const content = document.getElementById("content");
   if (!content) return;
 
-  const latestEntries = getLatestEntryByWorker();
-  const openCount = latestEntries.filter((entry) => cleanText(entry.Status).toUpperCase() === "OPEN").length;
-  const missingGpsCount = latestEntries.filter((entry) => {
+  ensureFieldMapDefaults();
+
+  const entries = getFilteredFieldMapEntries();
+
+  const openCount = entries.filter((entry) => cleanText(entry.Status).toUpperCase() === "OPEN").length;
+  const missingGpsCount = entries.filter((entry) => {
     const lat = getEntryLat(entry);
     const lng = getEntryLng(entry);
     return !lat || !lng;
   }).length;
 
-  const alertCount = latestEntries.filter((entry) => {
+  const alertCount = entries.filter((entry) => {
     const alert = getEntryAlert(entry);
     return ["Open Too Long", "Missing GPS"].includes(alert.label);
   }).length;
+
+  const modeLabel = state.fieldMap.showOpenOnly
+    ? "All currently open jobs"
+    : `Worker status for ${state.fieldMap.selectedDate}`;
 
   content.innerHTML = `
     <div class="space-y-6">
@@ -365,7 +463,7 @@ export function renderFieldMapTab() {
             <div>
               <h2 class="text-2xl font-semibold">Field Map</h2>
               <p class="text-sm text-slate-500">
-                One live marker per worker using their most recent clock-in or clock-out GPS.
+                ${escapeHtml(modeLabel)}
               </p>
             </div>
 
@@ -377,9 +475,39 @@ export function renderFieldMapTab() {
 
         <div class="panel-body space-y-5">
           <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <div class="stat-label">Date</div>
+              <input
+                type="date"
+                class="column-filter-input"
+                value="${escapeHtml(state.fieldMap.selectedDate || getTodayDateInput())}"
+                onchange="window.setFieldMapDateAndRender(this.value)"
+              />
+            </div>
+
+            <div class="flex items-end">
+              <button class="secondary-btn w-full" type="button" onclick="window.showFieldMapTodayAndRender()">
+                Today
+              </button>
+            </div>
+
+            <div class="flex items-end">
+              <button class="secondary-btn w-full" type="button" onclick="window.showFieldMapOpenOnlyAndRender()">
+                Show All Open Jobs
+              </button>
+            </div>
+
+            <div class="flex items-end">
+              <div class="success-box w-full">
+                ${escapeHtml(modeLabel)}
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div class="stat-card">
-              <div class="stat-label">Workers Shown</div>
-              <div class="stat-value">${latestEntries.length}</div>
+              <div class="stat-label">Workers / Entries Shown</div>
+              <div class="stat-value">${entries.length}</div>
             </div>
 
             <div class="stat-card">
@@ -401,20 +529,20 @@ export function renderFieldMapTab() {
           <div id="fieldMapCanvas" class="field-map-canvas"></div>
 
           <div class="text-sm text-slate-500">
-            Alerts are based on GPS availability, open clock-ins, and whether the open time exceeds assigned time by more than 30 minutes.
+            Date mode shows the most recent status per worker for that date. Open mode shows all currently open jobs regardless of date.
           </div>
         </div>
       </div>
 
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
         ${
-          latestEntries.length
-            ? latestEntries.map(renderWorkerStatusCard).join("")
-            : `<div class="blank-state-box">No time entries found yet.</div>`
+          entries.length
+            ? entries.map(renderWorkerStatusCard).join("")
+            : `<div class="blank-state-box">No worker statuses found for this view.</div>`
         }
       </div>
     </div>
   `;
 
-  initializeFieldMap(latestEntries);
+  initializeFieldMap(entries);
 }
