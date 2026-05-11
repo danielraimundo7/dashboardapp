@@ -620,3 +620,10 @@ tbody tr.ring-1 {
     padding: 4px 6px !important;
   }
 }
+.field-map-canvas {
+  width: 100%;
+  height: 520px;
+  border-radius: 18px;
+  border: 1px solid #cbd5e1;
+  overflow: hidden;
+}
