@@ -1,6 +1,7 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbwz401Ii47fb86kB-eo93tirJmGpbHFS2jEonIn6yuFjNqu5rxjQiPvUTOzDkvAvoPR/exec";
 let portalWorkers = [];
 let currentWorker = null;
+let selectedScheduleDate = new Date();
 
 function getTodayDateString() {
   const today = new Date();
@@ -9,6 +10,34 @@ function getTodayDateString() {
   const day = String(today.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+function formatDateForApi(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateLabel(date) {
+  const today = getTodayDateString();
+  const selected = formatDateForApi(date);
+
+  if (selected === today) return "Today";
+
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric"
+  });
+}
+
+function updateDateControls() {
+  const label = document.getElementById("scheduleDateLabel");
+  if (label) label.innerText = formatDateLabel(selectedScheduleDate);
+}
+
+
+
 
 async function fetchApi(params) {
   const url = new URL(API_URL);
@@ -94,6 +123,8 @@ async function loadPortalWorkers() {
 async function loadWorkerSchedule() {
   if (!currentWorker) return;
 
+  updateDateControls();
+
   const jobsContainer = document.getElementById("jobsContainer");
   if (!jobsContainer) return;
 
@@ -107,7 +138,7 @@ async function loadWorkerSchedule() {
     const result = await fetchApi({
       action: "getWorkerSchedule",
       workerId: currentWorker.workerId,
-      date: getTodayDateString()
+      date: formatDateForApi(selectedScheduleDate)
     });
 
     if (!result.success) {
@@ -119,11 +150,17 @@ async function loadWorkerSchedule() {
     if (jobs.length === 0) {
       jobsContainer.innerHTML = `
         <div class="job-card text-gray-500">
-          No jobs found for today.
+          No jobs found for this day.
         </div>
       `;
       return;
     }
+
+    jobs.sort((a, b) => {
+      const timeA = a.requestedTime24 || "";
+      const timeB = b.requestedTime24 || "";
+      return timeA.localeCompare(timeB);
+    });
 
     jobsContainer.innerHTML = jobs
       .map(
@@ -171,6 +208,7 @@ async function loadWorkerSchedule() {
         `
       )
       .join("");
+
   } catch (error) {
     jobsContainer.innerHTML = `
       <div class="job-card text-red-500">
@@ -179,6 +217,23 @@ async function loadWorkerSchedule() {
     `;
   }
 }
+
+
+
+
+
+
+window.changeScheduleDate = async function (direction) {
+  selectedScheduleDate.setDate(selectedScheduleDate.getDate() + direction);
+  await loadWorkerSchedule();
+};
+
+window.goToTodaySchedule = async function () {
+  selectedScheduleDate = new Date();
+  await loadWorkerSchedule();
+};
+
+
 
 window.portalLogin = async function () {
   const workerSelect = document.getElementById("workerSelect");
