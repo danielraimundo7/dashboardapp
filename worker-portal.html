@@ -140,20 +140,48 @@
             </p>
           </div>
 
-          <button
-            class="secondary-btn !w-auto"
-            onclick="window.portalLogout()"
-          >
-            Logout
-          </button>
-        </div>
 
-        <div
-          id="jobsContainer"
-          class="space-y-4"
-        ></div>
+    <button
+      class="secondary-btn !w-auto"
+      onclick="window.portalLogout()"
+    >
+      Logout
+    </button>
+  </div>
 
-      </div>
+  <!-- DATE NAVIGATION -->
+  <div class="flex items-center justify-between gap-3 mb-6">
+    <button
+      class="secondary-btn !w-auto"
+      onclick="window.changeScheduleDate(-1)"
+    >
+      ←
+    </button>
+
+    <button
+      id="scheduleDateLabel"
+      class="secondary-btn !w-auto"
+      onclick="window.goToTodaySchedule()"
+    >
+      Today
+    </button>
+
+    <button
+      class="secondary-btn !w-auto"
+      onclick="window.changeScheduleDate(1)"
+    >
+      →
+    </button>
+  </div>
+
+  <div
+    id="jobsContainer"
+    class="space-y-4"
+  ></div>
+
+</div>
+
+
 
     </div>
 
