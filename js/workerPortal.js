@@ -85,6 +85,29 @@ function getClockStatusBadgeClass(clockStatus) {
   return "bg-gray-200 text-gray-700";
 }
 
+function formatJobPayout(job) {
+  const rate = Number(job.rate || 0);
+  const assignedDecimal = Number(job.assignedTimeDecimal || 0);
+  const payType = String(job.rateType || "").toLowerCase();
+
+  if (!rate) return "-";
+
+  if (payType.includes("flat")) {
+    return `$${rate.toFixed(0)}`;
+  }
+
+  if (assignedDecimal) {
+    return `~$${(rate * assignedDecimal).toFixed(0)}`;
+  }
+
+  return `~$${rate.toFixed(0)}`;
+}
+
+
+
+
+
+
 async function loadPortalWorkers() {
   const workerSelect = document.getElementById("workerSelect");
   if (!workerSelect) return;
@@ -196,6 +219,11 @@ async function loadWorkerSchedule() {
                 <strong>Assigned:</strong>
                 ${escapeHtml(job.assignedTime || "-")}
               </div>
+
+              <div>
+                <strong>Payout:</strong>
+                ${escapeHtml(formatJobPayout(job))}
+              </div>  
             </div>
 
             <button
