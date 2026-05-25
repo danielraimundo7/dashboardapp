@@ -120,10 +120,14 @@ async function loadWorkerBalance() {
 
   try {
     const result = await fetchApi({
-      action: "getWorkerBalance",
-      workerId: currentWorker.workerId,
-      date: formatDateForApi(selectedScheduleDate)
-    });
+  action: "getWorkerBalance",
+  workerId: currentWorker.workerId,
+  date: formatDateForApi(selectedScheduleDate)
+});
+
+console.log("BALANCE RESULT:", result);
+console.log("BALANCE DATE:", formatDateForApi(selectedScheduleDate));
+console.log("BALANCE WORKER:", currentWorker.workerId);
 
     if (!result.success) {
       throw new Error(result.error || "Could not load balance.");
@@ -178,6 +182,7 @@ async function loadWorkerSchedule() {
   if (!currentWorker) return;
 
   updateDateControls();
+  await loadWorkerBalance();
 
   const jobsContainer = document.getElementById("jobsContainer");
   if (!jobsContainer) return;
