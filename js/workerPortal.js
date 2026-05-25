@@ -2,6 +2,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbwz401Ii47fb86kB-eo93ti
 let portalWorkers = [];
 let currentWorker = null;
 let selectedScheduleDate = new Date();
+const directEventId = new URLSearchParams(window.location.search).get("eventId");
 
 function getTodayDateString() {
   const today = new Date();
@@ -106,6 +107,16 @@ function formatJobPayout(job) {
 function formatMoney(value) {
   const amount = Number(value || 0);
   return `$${amount.toFixed(2)}`;
+}
+
+function openDirectJobIfNeeded() {
+  if (!directEventId || !currentWorker) return false;
+
+  const jobLink =
+    `${window.location.origin}/worker-portal.html?eventId=${encodeURIComponent(directEventId)}`;
+
+  window.openPortalJob(jobLink);
+  return true;
 }
 
 
@@ -341,6 +352,7 @@ window.portalLogin = async function () {
 
     document.getElementById("workerNameDisplay").innerText =
       currentWorker.workerName || currentWorker.workerId;
+      if (openDirectJobIfNeeded()) return;
 
     await loadWorkerSchedule();
   } catch (error) {
@@ -389,7 +401,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       document.getElementById("workerNameDisplay").innerText =
         currentWorker.workerName || currentWorker.workerId;
-
+      if (openDirectJobIfNeeded()) return;
       await loadWorkerSchedule();
     } catch (_) {
       localStorage.removeItem("workerPortalUser");
