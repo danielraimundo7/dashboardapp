@@ -113,9 +113,9 @@ function openDirectJobIfNeeded() {
   if (!directEventId || !currentWorker) return false;
 
   const jobLink =
-  `${window.location.origin}/?eventId=${encodeURIComponent(directEventId)}`;
+    `https://clockin-app-dun.vercel.app/?eventId=${encodeURIComponent(directEventId)}&workerId=${encodeURIComponent(currentWorker.workerId)}&fromPortal=1`;
 
-  window.openPortalJob(jobLink);
+  window.location.href = jobLink;
   return true;
 }
 
