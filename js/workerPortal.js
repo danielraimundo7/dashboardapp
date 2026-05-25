@@ -113,7 +113,7 @@ function openDirectJobIfNeeded() {
   if (!directEventId || !currentWorker) return false;
 
   const jobLink =
-    `${window.location.origin}/worker-portal.html?eventId=${encodeURIComponent(directEventId)}`;
+  `${window.location.origin}/?eventId=${encodeURIComponent(directEventId)}`;
 
   window.openPortalJob(jobLink);
   return true;
