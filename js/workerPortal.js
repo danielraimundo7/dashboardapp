@@ -91,7 +91,7 @@ function formatJobPayout(job) {
   const assignedDecimal = Number(job.assignedTimeDecimal || 0);
   const adjustmentDecimal = parseAdjustmentToDecimal(job.authorizedTimeAdjustment);
   const totalDecimal = Math.max(assignedDecimal + adjustmentDecimal, 0);
-  const payType = String(job.rateType || "").toLowerCase();
+  const payType = String(job.role || "").toLowerCase();
 
   if (!rate) return "-";
 
