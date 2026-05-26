@@ -100,8 +100,14 @@ function formatJobPayout(job) {
   }
 
   if (totalDecimal) {
-    return `~$${(rate * totalDecimal).toFixed(0)}`;
+  const payout = `$${(rate * totalDecimal).toFixed(0)}`;
+
+  if (String(job.clockStatus || "").toLowerCase() === "completed") {
+    return payout;
   }
+
+  return `~${payout}`;
+}
 
   return `~$${rate.toFixed(0)}`;
 }
