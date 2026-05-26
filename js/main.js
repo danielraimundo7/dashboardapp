@@ -844,14 +844,6 @@ window.openTimeEntryMapByFilteredIndex = (index) => {
   render();
 };
 
-window.openTimeEntryMapByOpenIndex = (index) => {
-  const openRows = state.timeEntries.filter(
-    (row) => String(row.Status || "").toUpperCase() === "OPEN"
-  );
-
-  openTimeEntryMap(openRows[index]);
-  render();
-};
 
 window.closeTimeEntryMap = () => {
   closeTimeEntryMap();
@@ -984,6 +976,17 @@ window.showFieldMapTodayAndRender = showFieldMapTodayAndRender;
 
 window.setTimeEntriesViewMode = (mode) => {
   setTimeEntriesViewMode(mode);
+  render();
+};
+window.openTimeEntryMapByOpenIndex = (index) => {
+  const openRows = state.timeEntries.filter(
+    (row) => String(row.Status || "").toUpperCase() === "OPEN"
+  );
+
+  const row = openRows[index];
+  if (!row) return;
+
+  openTimeEntryMap(row);
   render();
 };
 
