@@ -265,6 +265,15 @@ async function loadWorkerSchedule() {
               <div>
                 <strong>Assigned:</strong>
                 ${escapeHtml(job.assignedTime || "-")}
+
+                ${
+                  job.authorizedTimeAdjustment
+                    ? `<div class="text-xs text-gray-500 mt-1">
+                        <strong>Authorized Adjustment:</strong>
+                        ${escapeHtml(job.authorizedTimeAdjustment)}
+                </div>`
+                    : ""
+                }
               </div>
 
               <div>
