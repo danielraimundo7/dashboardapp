@@ -89,6 +89,8 @@ function getClockStatusBadgeClass(clockStatus) {
 function formatJobPayout(job) {
   const rate = Number(job.rate || 0);
   const assignedDecimal = Number(job.assignedTimeDecimal || 0);
+  const adjustmentDecimal = parseAdjustmentToDecimal(job.authorizedTimeAdjustment);
+  const totalDecimal = Math.max(assignedDecimal + adjustmentDecimal, 0);
   const payType = String(job.rateType || "").toLowerCase();
 
   if (!rate) return "-";
@@ -97,11 +99,29 @@ function formatJobPayout(job) {
     return `$${rate.toFixed(0)}`;
   }
 
-  if (assignedDecimal) {
-    return `~$${(rate * assignedDecimal).toFixed(0)}`;
+  if (totalDecimal) {
+    return `~$${(rate * totalDecimal).toFixed(0)}`;
   }
 
   return `~$${rate.toFixed(0)}`;
+}
+
+function parseAdjustmentToDecimal(value) {
+  const text = String(value || "").toLowerCase().trim();
+  if (!text) return 0;
+
+  const sign = text.startsWith("-") ? -1 : 1;
+  const cleaned = text.replace("+", "").replace("-", "").trim();
+
+  let totalMinutes = 0;
+
+  const hoursMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*h/);
+  if (hoursMatch) totalMinutes += Number(hoursMatch[1]) * 60;
+
+  const minutesMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*m/);
+  if (minutesMatch) totalMinutes += Number(minutesMatch[1]);
+
+  return sign * (totalMinutes / 60);
 }
 
 function formatMoney(value) {
