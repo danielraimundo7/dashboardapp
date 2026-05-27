@@ -216,13 +216,24 @@ function buildWorkerReport(worker, week) {
     parseReportTimeToMinutes(b.StartTime || b.RequestedTime || "");
 })
     .map((row) => {
-      const assignedHours = getJobAssignedHours(row);
-      const authorizedHours = getAuthorizedAssignedHours(row);
-      const workedHours = getWorkedHoursForJob(workerId, row.EventId);
-      const payableWorkedHours = getPayableWorkedHours(row, workerId);
+      const originalAssignedHours = getJobAssignedHours(row);
+      const assignedHours = getAuthorizedAssignedHours(row);
+      const authorizedHours = assignedHours;
+
+      const workedHours = 0;
+      const payableWorkedHours = assignedHours;
+
       const baseRate = getJobRate(row) || fallbackBaseRate;
-      const payout = getJobPayout(row, workerId);
-      const averagePayPerHour = workedHours > 0 ? payout / workedHours : 0;
+      let payout = 0;
+
+        if (getJobPayType(row).includes("flat")) {
+          payout = baseRate + getWorkerAdjustment(row);
+        } else if (getJobPayType(row).includes("hourly")) {
+          payout = assignedHours * baseRate + getWorkerAdjustment(row);
+        }
+
+      const averagePayPerHour =
+        assignedHours > 0 ? payout / assignedHours : 0;
 
       return {
         worker: workerName,
@@ -237,15 +248,15 @@ function buildWorkerReport(worker, week) {
         timeAssigned: String(row.AssignedTime || ""),
         assignedHours,
         authorizedHours,
-        workedTime: workedHours ? `${formatNumber(workedHours, 2)}h` : "",
-        workedHours,
-        payableWorkedHours,
+        workedTime: "",
+        workedHours: assignedHours,
+        payableWorkedHours: assignedHours,
         baseRate,
         averagePayPerHour,
-        miles: 0,
-        milePay: 0,
-        driveOverageHours: 0,
-        driveOveragePay: 0,
+        miles: "",
+        milePay: "",
+        driveOverageHours: "",
+        driveOveragePay: "",
         liability: 0,
         pendingOvertime: 0,
         otPay: 0,
@@ -276,10 +287,10 @@ function buildWorkerReport(worker, week) {
     authorizedHours: 0,
     workedHours: 0,
     payableWorkedHours: 0,
-    miles: 0,
-    milePay: 0,
-    driveOverageHours: 0,
-    driveOveragePay: 0,
+    miles: "",
+    milePay: "",
+    driveOverageHours: "",
+    driveOveragePay: "",
     liability: 0,
     pendingOvertime: 0,
     otPay: 0,
@@ -287,9 +298,17 @@ function buildWorkerReport(worker, week) {
     totalPay: 0
   });
 
-  totals.averagePayPerHour = totals.workedHours > 0
-    ? totals.payout / totals.workedHours
+  totals.averagePayPerHour =
+  totals.assignedHours > 0 ? totals.payout / totals.assignedHours : 0;
+
+totals.pendingOvertime = Math.max(totals.assignedHours - 40, 0);
+
+totals.otPay =
+  totals.pendingOvertime > 0
+    ? totals.pendingOvertime * totals.averagePayPerHour * 1.5
     : 0;
+
+totals.totalPay = totals.payout + totals.otPay;
 
   return {
     workerId,
@@ -416,10 +435,10 @@ function renderReportTable(report) {
                 <td>${formatNumber(row.payableWorkedHours, 2)}</td>
                 <td>${formatCurrency(row.baseRate)}</td>
                 <td>${formatCurrency(row.averagePayPerHour)}</td>
-                <td>${formatNumber(row.miles, 1)}</td>
-                <td>${formatCurrency(row.milePay)}</td>
-                <td>${formatNumber(row.driveOverageHours, 2)}</td>
-                <td>${formatCurrency(row.driveOveragePay)}</td>
+                <td>${row.miles}</td>
+                <td>${row.milePay}</td>
+                <td>${row.driveOverageHours}</td>
+                <td>${row.driveOveragePay}</td>
                 <td>${formatCurrency(row.liability)}</td>
                 <td>${formatNumber(row.pendingOvertime, 2)}</td>
                 <td>${formatCurrency(row.otPay)}</td>
@@ -439,10 +458,10 @@ function renderReportTable(report) {
               <td>${formatNumber(report.totals.payableWorkedHours, 2)}</td>
               <td></td>
               <td>${formatCurrency(report.totals.averagePayPerHour)}</td>
-              <td>${formatNumber(report.totals.miles, 1)}</td>
-              <td>${formatCurrency(report.totals.milePay)}</td>
-              <td>${formatNumber(report.totals.driveOverageHours, 2)}</td>
-              <td>${formatCurrency(report.totals.driveOveragePay)}</td>
+              <td>${report.totals.miles}</td>
+              <td>${report.totals.milePay}</td>
+              <td>${report.totals.driveOverageHours}</td>
+              <td>${report.totals.driveOveragePay}</td>
               <td>${formatCurrency(report.totals.liability)}</td>
               <td>${formatNumber(report.totals.pendingOvertime, 2)}</td>
               <td>${formatCurrency(report.totals.otPay)}</td>
