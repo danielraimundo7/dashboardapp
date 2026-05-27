@@ -182,6 +182,24 @@ function getRelevantWorkers() {
   return (state.workers || []).filter((worker) => workerIdsInJobs.has(getWorkerId(worker)));
 }
 
+function parseReportTimeToMinutes(value) {
+  const text = String(value || "").trim();
+
+  const match = text.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (!match) return 0;
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  const meridiem = match[3].toUpperCase();
+
+  if (meridiem === "PM" && hours !== 12) hours += 12;
+  if (meridiem === "AM" && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
+}
+
+
+
 function buildWorkerReport(worker, week) {
   const workerId = getWorkerId(worker);
   const workerName = getWorkerName(worker);
@@ -191,10 +209,12 @@ function buildWorkerReport(worker, week) {
     .filter((row) => getJobWorkerId(row) === workerId)
     .filter((row) => rowIsInWeek(row, week))
     .sort((a, b) => {
-      const dateCompare = String(a.Date || "").localeCompare(String(b.Date || ""));
-      if (dateCompare !== 0) return dateCompare;
-      return String(a.RequestedTime || "").localeCompare(String(b.RequestedTime || ""));
-    })
+  const dateCompare = String(a.Date || "").localeCompare(String(b.Date || ""));
+  if (dateCompare !== 0) return dateCompare;
+
+  return parseReportTimeToMinutes(a.StartTime || a.RequestedTime || "") -
+    parseReportTimeToMinutes(b.StartTime || b.RequestedTime || "");
+})
     .map((row) => {
       const assignedHours = getJobAssignedHours(row);
       const authorizedHours = getAuthorizedAssignedHours(row);
