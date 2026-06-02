@@ -4,165 +4,37 @@ import { createWorkerReportSpreadsheet } from "./api.js";
 
 
 const REPORT_COLUMNS = [
-  {
-    key: "worker",
-    label: "Worker",
-    defaultSelected: true,
-    totalType: null,
-    affectsTotalPay: false
-  },
+  { key: "worker", label: "Worker", defaultSelected: true, totalType: null, affectsTotalPay: false },
+  { key: "calendarName", label: "Calendar", defaultSelected: true, totalType: null, affectsTotalPay: false },
+  { key: "client", label: "Client", defaultSelected: true, totalType: null, affectsTotalPay: false },
+  { key: "date", label: "Date", defaultSelected: true, totalType: null, affectsTotalPay: false },
+  { key: "dayOfWeek", label: "Day", defaultSelected: true, totalType: null, affectsTotalPay: false },
+  { key: "rateType", label: "Pay Type", defaultSelected: true, totalType: null, affectsTotalPay: false },
 
-  {
-    key: "calendarName",
-    label: "Calendar",
-    defaultSelected: true,
-    totalType: null,
-    affectsTotalPay: false
-  },
+  { key: "tip", label: "Tip", defaultSelected: true, totalType: "currency", affectsTotalPay: false },
+  { key: "payout", label: "Payout", defaultSelected: true, totalType: "currency", affectsTotalPay: true },
 
-  {
-    key: "client",
-    label: "Client",
-    defaultSelected: true,
-    totalType: null,
-    affectsTotalPay: false
-  },
+  { key: "timeAssigned", label: "Time Assigned", defaultSelected: true, totalType: null, affectsTotalPay: false },
+  { key: "timeAssignedDecimal", label: "Time Assigned Decimal", defaultSelected: true, totalType: "number", affectsTotalPay: false },
+  { key: "payableWorkedHours", label: "Payable Worked", defaultSelected: true, totalType: "number", affectsTotalPay: false },
 
-  {
-    key: "date",
-    label: "Date",
-    defaultSelected: true,
-    totalType: null,
-    affectsTotalPay: false
-  },
+  { key: "baseRate", label: "Base Rate", defaultSelected: true, totalType: "currency", affectsTotalPay: false },
+  { key: "averagePayPerHour", label: "Avg Pay/Hr", defaultSelected: true, totalType: "currency", affectsTotalPay: false },
 
-  {
-    key: "dayOfWeek",
-    label: "Day",
-    defaultSelected: true,
-    totalType: null,
-    affectsTotalPay: false
-  },
+  { key: "miles", label: "Miles", defaultSelected: true, totalType: "number", affectsTotalPay: false },
+  { key: "milePay", label: "Mile Pay", defaultSelected: true, totalType: "currency", affectsTotalPay: true },
 
-  {
-    key: "rateType",
-    label: "Pay Type",
-    defaultSelected: true,
-    totalType: null,
-    affectsTotalPay: false
-  },
+  { key: "driveOverageHours", label: "Drive Overage", defaultSelected: true, totalType: "number", affectsTotalPay: false },
+  { key: "driveOtDecimal", label: "Drive OT Decimal", defaultSelected: true, totalType: "number", affectsTotalPay: false },
+  { key: "driveOveragePay", label: "Drive OT Pay", defaultSelected: true, totalType: "currency", affectsTotalPay: true },
 
-  {
-    key: "payout",
-    label: "Payout",
-    defaultSelected: true,
-    totalType: "currency",
-    affectsTotalPay: true
-  },
+  { key: "overTime", label: "Over Time", defaultSelected: true, totalType: "number", affectsTotalPay: false },
+  { key: "otPay", label: "OT Pay", defaultSelected: true, totalType: "currency", affectsTotalPay: true },
 
-  {
-    key: "timeAssigned",
-    label: "Time Assigned",
-    defaultSelected: true,
-    totalType: null,
-    affectsTotalPay: false
-  },
-
-  {
-    key: "assignedHours",
-    label: "Assigned",
-    defaultSelected: true,
-    totalType: "number",
-    affectsTotalPay: false
-  },
-
-  {
-    key: "authorizedHours",
-    label: "Authorized",
-    defaultSelected: true,
-    totalType: "number",
-    affectsTotalPay: false
-  },
-
-  {
-    key: "averagePayPerHour",
-    label: "Avg Pay/Hr",
-    defaultSelected: true,
-    totalType: "currency",
-    affectsTotalPay: false
-  },
-
-  {
-    key: "pendingOvertime",
-    label: "Pending OT",
-    defaultSelected: true,
-    totalType: "number",
-    affectsTotalPay: false
-  },
-
-  {
-    key: "otPay",
-    label: "OT Pay",
-    defaultSelected: true,
-    totalType: "currency",
-    affectsTotalPay: true
-  },
-
-  {
-    key: "bonus",
-    label: "Bonus",
-    defaultSelected: true,
-    totalType: "currency",
-    affectsTotalPay: true
-  },
-
-  {
-    key: "miles",
-    label: "Miles",
-    defaultSelected: false,
-    totalType: "number",
-    affectsTotalPay: false
-  },
-
-  {
-    key: "milePay",
-    label: "Mile Pay",
-    defaultSelected: false,
-    totalType: "currency",
-    affectsTotalPay: true
-  },
-
-  {
-    key: "driveOverageHours",
-    label: "Drive Overage",
-    defaultSelected: false,
-    totalType: "number",
-    affectsTotalPay: false
-  },
-
-  {
-    key: "driveOveragePay",
-    label: "Drive OT Pay",
-    defaultSelected: false,
-    totalType: "currency",
-    affectsTotalPay: true
-  },
-
-  {
-    key: "liability",
-    label: "Liability",
-    defaultSelected: false,
-    totalType: "currency",
-    affectsTotalPay: false
-  },
-
-  {
-    key: "totalPay",
-    label: "Total Pay",
-    defaultSelected: true,
-    totalType: "currency",
-    affectsTotalPay: false
-  }
+  { key: "liability", label: "Liability", defaultSelected: true, totalType: "currency", affectsTotalPay: true },
+  { key: "bonus", label: "Bonus", defaultSelected: true, totalType: "currency", affectsTotalPay: true },
+  { key: "pendingPay", label: "Pending Pay", defaultSelected: true, totalType: "currency", affectsTotalPay: true },
+  { key: "totalPay", label: "Total Pay", defaultSelected: true, totalType: "currency", affectsTotalPay: false }
 ];
 
 function getDefaultReportColumnKeys() {
@@ -475,82 +347,108 @@ function buildWorkerReport(worker, week) {
         date: getJobDate(row),
         dayOfWeek: getDayName(getJobDate(row)),
         rateType: getJobPayType(row),
+
         tip: 0,
         payout,
+
         timeAssigned: String(row.AssignedTime || ""),
-        assignedHours,
-        authorizedHours,
-        workedTime: "",
-        workedHours: assignedHours,
+        timeAssignedDecimal: originalAssignedHours,
+
         payableWorkedHours: assignedHours,
+
         baseRate,
         averagePayPerHour,
+
         miles: "",
         milePay: "",
+
         driveOverageHours: "",
+        driveOtDecimal: "",
         driveOveragePay: "",
-        liability: 0,
-        pendingOvertime: 0,
+
+        overTime: 0,
         otPay: 0,
+
+        liability: 0,
         bonus: 0,
+        pendingPay: 0,
+
         totalPay: payout
       };
-    });
+          });
 
-  const totals = rows.reduce((acc, row) => {
-    acc.payout += row.payout;
-    acc.assignedHours += row.assignedHours;
-    acc.authorizedHours += row.authorizedHours;
-    acc.workedHours += row.workedHours;
-    acc.payableWorkedHours += row.payableWorkedHours;
-    acc.miles += row.miles;
-    acc.milePay += row.milePay;
-    acc.driveOverageHours += row.driveOverageHours;
-    acc.driveOveragePay += row.driveOveragePay;
-    acc.liability += row.liability;
-    acc.pendingOvertime += row.pendingOvertime;
-    acc.otPay += row.otPay;
-    acc.bonus += row.bonus;
-    acc.totalPay += row.totalPay;
-    return acc;
-  }, {
-    payout: 0,
-    assignedHours: 0,
-    authorizedHours: 0,
-    workedHours: 0,
-    payableWorkedHours: 0,
-    miles: "",
-    milePay: "",
-    driveOverageHours: "",
-    driveOveragePay: "",
-    liability: 0,
-    pendingOvertime: 0,
-    otPay: 0,
-    bonus: 0,
-    totalPay: 0
-  });
+        const totals = rows.reduce((acc, row) => {
+          acc.tip += row.tip;
+          acc.payout += row.payout;
 
-  totals.averagePayPerHour =
-  totals.assignedHours > 0 ? totals.payout / totals.assignedHours : 0;
+          acc.timeAssignedDecimal += row.timeAssignedDecimal;
+          acc.payableWorkedHours += row.payableWorkedHours;
 
-totals.pendingOvertime = Math.max(totals.assignedHours - 40, 0);
+          
+          
 
-totals.otPay =
-  totals.pendingOvertime > 0
-    ? totals.pendingOvertime * totals.averagePayPerHour * 1.5
-    : 0;
+          
 
-totals.totalPay = totals.payout + totals.otPay;
+          acc.liability += row.liability;
+          acc.bonus += row.bonus;
+          acc.pendingPay += row.pendingPay;
 
-  return {
-    workerId,
-    workerName,
-    weekStart: week.startText,
-    weekEnd: week.endText,
-    rows,
-    totals
-  };
-}
+          acc.totalPay += row.totalPay;
+
+          return acc;
+        }, {
+          tip: 0,
+          payout: 0,
+
+          timeAssignedDecimal: 0,
+          payableWorkedHours: 0,
+
+         miles: "",
+        milePay: "",
+
+        driveOverageHours: "",
+        driveOtDecimal: "",
+        driveOveragePay: "",
+
+          overTime: 0,
+          otPay: 0,
+
+          liability: 0,
+          bonus: 0,
+          pendingPay: 0,
+
+          totalPay: 0
+        });
+
+          totals.averagePayPerHour =
+  totals.payableWorkedHours > 0
+          ? totals.payout / totals.payableWorkedHours
+          : 0;
+
+      totals.overTime =
+        Math.max(totals.payableWorkedHours - 40, 0);
+
+      totals.otPay =
+        totals.overTime > 0
+          ? totals.overTime * totals.averagePayPerHour * 1.5
+          : 0;
+
+      totals.totalPay =
+      totals.payout +
+      totals.otPay +
+      totals.bonus +
+      totals.pendingPay -
+      totals.liability;
+
+          return {
+            workerId,
+            workerName,
+            weekStart: week.startText,
+            weekEnd: week.endText,
+            rows,
+            totals
+          };
+        }
 
 export function setReportsWeekStartDate(value) {
   state.reports.weekStartDate = value;
