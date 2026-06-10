@@ -200,14 +200,21 @@ function getJobPayType(row) {
 function getAuthorizedAssignedHours(row) {
   const assignedHours = getJobAssignedHours(row);
 
-  const adjustmentText = String(row.AuthorizedTimeAdjustment || "").trim();
+  const adjustmentText = String(
+    row.AuthorizedTimeAdjustment || ""
+  ).trim();
 
-  const adjustmentMatch = adjustmentText.match(/([+-]?\d+)/);
-  const adjustmentMinutes = adjustmentMatch
-    ? Number(adjustmentMatch[1])
-    : 0;
+  if (!adjustmentText) {
+    return assignedHours;
+  }
 
-  return assignedHours + (adjustmentMinutes / 60);
+  const hoursMatch = adjustmentText.match(/([+-]?\d+(?:\.\d+)?)\s*h/i);
+  const minutesMatch = adjustmentText.match(/([+-]?\d+(?:\.\d+)?)\s*m/i);
+
+  const hours = hoursMatch ? Number(hoursMatch[1]) : 0;
+  const minutes = minutesMatch ? Number(minutesMatch[1]) : 0;
+
+  return assignedHours + hours + (minutes / 60);
 }
 
 function getWorkedMinutesForJob(workerId, eventId) {
